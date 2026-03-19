@@ -1,1108 +1,752 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import * as THREE from 'three'
 
-// ─── ROUTING ───────────────────────────────────────────────────────────────
 function getRoute() {
   return window.location.pathname === '/presenter' ? 'presenter' : 'customer'
 }
 
-// ─── BROADCAST CHANNEL ─────────────────────────────────────────────────────
 const CHANNEL = 'aimrose-slide-sync'
-
 function useSyncSend() {
-  const ch = useRef(null)
-  const ready = useRef(false)
-  useEffect(() => {
-    ch.current = new BroadcastChannel(CHANNEL)
-    ready.current = true
-    return () => { ch.current.close(); ready.current = false }
-  }, [])
-  const send = useRef((sectionId) => {
-    if (ready.current) ch.current.postMessage({ sectionId })
-    else setTimeout(() => ch.current?.postMessage({ sectionId }), 150)
-  })
+  const ch = useRef(null); const ready = useRef(false)
+  useEffect(() => { ch.current = new BroadcastChannel(CHANNEL); ready.current = true; return () => { ch.current.close(); ready.current = false } }, [])
+  const send = useRef((id) => { if (ready.current) ch.current.postMessage({ sectionId: id }); else setTimeout(() => ch.current?.postMessage({ sectionId: id }), 150) })
   return send.current
 }
-
 function useSyncReceive(onSection) {
+  useEffect(() => { const ch = new BroadcastChannel(CHANNEL); ch.onmessage = (e) => { if (e.data?.sectionId) onSection(e.data.sectionId) }; return () => ch.close() }, [onSection])
+}
+
+const CUSTOMER_MAP = { intro:'intro', background:'background', strength:'strength', service:'service', method1:'method1', method2:'method2', pricing:'pricing', wholesale:'wholesale', steps:'steps', contact:'contact' }
+
+const C = { ivory:'#f5f0e8', cream:'#ede7d9', warmWhite:'#faf7f2', charcoal:'#1a1612', gold:'#b8924a', goldLight:'#d4aa6a', goldDark:'#8a6830', rose:'#c4857a', slate:'#4a4540', muted:'#7a7068', bg:'#0d0c0a', surface:'#181614', border:'#2a2520', textDim:'#6a6058', textMid:'#a09080', textLight:'#e8ddd0' }
+
+// ═══════════════════════════════════════
+// THREE.JS SCENE: HERO
+// ═══════════════════════════════════════
+function HeroScene() {
+  const canvasRef = useRef(null)
   useEffect(() => {
-    const ch = new BroadcastChannel(CHANNEL)
-    ch.onmessage = (e) => { if (e.data?.sectionId) onSection(e.data.sectionId) }
-    return () => ch.close()
-  }, [onSection])
+    const canvas = canvasRef.current; if (!canvas) return
+    const w = canvas.offsetWidth, h = canvas.offsetHeight
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(w, h)
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera(60, w / h, 0.1, 200)
+    camera.position.set(0, 0, 13)
+
+    // Central wireframe forms
+    const g1 = new THREE.IcosahedronGeometry(2.4, 1)
+    const m1 = new THREE.MeshBasicMaterial({ color: 0xb8924a, wireframe: true, transparent: true, opacity: 0.65 })
+    const mesh1 = new THREE.Mesh(g1, m1); scene.add(mesh1)
+    const g2 = new THREE.IcosahedronGeometry(3.8, 1)
+    const m2 = new THREE.MeshBasicMaterial({ color: 0xd4aa6a, wireframe: true, transparent: true, opacity: 0.18 })
+    const mesh2 = new THREE.Mesh(g2, m2); scene.add(mesh2)
+
+    // Orbital torus rings
+    const rings = [
+      [4.4, 0.016, [Math.PI/2, 0, 0]],
+      [5.3, 0.011, [Math.PI/3, Math.PI/4, 0.2]],
+      [3.8, 0.014, [0.1, Math.PI/5, Math.PI/6]],
+      [6.0, 0.009, [Math.PI/7, Math.PI/3, Math.PI/5]],
+    ].map(([r, tube, rot]) => {
+      const g = new THREE.TorusGeometry(r, tube, 8, 120)
+      const m = new THREE.MeshBasicMaterial({ color: 0xb8924a, transparent: true, opacity: 0.3 })
+      const t = new THREE.Mesh(g, m); t.rotation.set(...rot); scene.add(t); return t
+    })
+
+    // Thread curves
+    for (let i = 0; i < 20; i++) {
+      const pts = Array.from({ length: 8 }, () => new THREE.Vector3((Math.random()-0.5)*16, (Math.random()-0.5)*16, (Math.random()-0.5)*4))
+      const curve = new THREE.CatmullRomCurve3(pts)
+      const geo = new THREE.TubeGeometry(curve, 40, 0.007+Math.random()*0.014, 4, false)
+      const mat = new THREE.MeshBasicMaterial({ color: Math.random()>0.5?0xd4aa6a:0x8a6830, transparent:true, opacity:0.1+Math.random()*0.2 })
+      scene.add(new THREE.Mesh(geo, mat))
+    }
+
+    // Particles
+    const N = 3500
+    const pos = new Float32Array(N*3), col = new Float32Array(N*3)
+    const ca = new THREE.Color(0xd4aa6a), cb = new THREE.Color(0xc4857a)
+    for (let i = 0; i < N; i++) {
+      const r = 5 + Math.random()*11, th = Math.random()*Math.PI*2, ph = Math.acos(2*Math.random()-1)
+      pos[i*3]=r*Math.sin(ph)*Math.cos(th); pos[i*3+1]=r*Math.sin(ph)*Math.sin(th); pos[i*3+2]=r*Math.cos(ph)
+      const c = ca.clone().lerp(cb, Math.random())
+      col[i*3]=c.r; col[i*3+1]=c.g; col[i*3+2]=c.b
+    }
+    const pg = new THREE.BufferGeometry()
+    pg.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    pg.setAttribute('color', new THREE.BufferAttribute(col, 3))
+    scene.add(new THREE.Points(pg, new THREE.PointsMaterial({ size:0.06, vertexColors:true, transparent:true, opacity:0.75 })))
+
+    const mouse = { x:0, y:0 }
+    const onMouse = e => { mouse.x=(e.clientX/window.innerWidth-0.5)*2; mouse.y=-(e.clientY/window.innerHeight-0.5)*2 }
+    window.addEventListener('mousemove', onMouse)
+
+    let f = 0, animId
+    const animate = () => {
+      animId = requestAnimationFrame(animate); f++
+      const t = f*0.004
+      mesh1.rotation.x=t*0.28; mesh1.rotation.y=t*0.38
+      mesh2.rotation.x=-t*0.18; mesh2.rotation.y=t*0.22
+      rings[0].rotation.z=t*0.14; rings[1].rotation.x=t*0.16; rings[2].rotation.y=t*0.11; rings[3].rotation.z=-t*0.09
+      camera.position.x+=(mouse.x*1.6-camera.position.x)*0.05
+      camera.position.y+=(mouse.y*1.0-camera.position.y)*0.05
+      camera.lookAt(0,0,0)
+      renderer.render(scene, camera)
+    }
+    animate()
+
+    const onResize = () => { if(!canvas) return; const w=canvas.offsetWidth,h=canvas.offsetHeight; renderer.setSize(w,h); camera.aspect=w/h; camera.updateProjectionMatrix() }
+    window.addEventListener('resize', onResize)
+
+    return () => { cancelAnimationFrame(animId); window.removeEventListener('mousemove', onMouse); window.removeEventListener('resize', onResize); renderer.dispose() }
+  }, [])
+  return <canvas ref={canvasRef} style={{ position:'absolute', inset:0, width:'100%', height:'100%', display:'block' }} />
 }
 
-// ─── CUSTOMER → PRESENTER SECTION MAP ──────────────────────────────────────
-const CUSTOMER_MAP = {
-  intro: 'intro',
-  background: 'background',
-  strength: 'strength',
-  service: 'service',
-  method1: 'method1',
-  method2: 'method2',
-  pricing: 'pricing',
-  wholesale: 'wholesale',
-  steps: 'steps',
-  contact: 'contact',
+// ═══════════════════════════════════════
+// THREE.JS SCENE: ORBITING SPHERES
+// ═══════════════════════════════════════
+function TriangleScene() {
+  const canvasRef = useRef(null)
+  useEffect(() => {
+    const canvas = canvasRef.current; if (!canvas) return
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(canvas.offsetWidth, canvas.offsetHeight)
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera(50, canvas.offsetWidth/canvas.offsetHeight, 0.1, 100)
+    camera.position.set(0,2,10); camera.lookAt(0,0,0)
+    scene.add(new THREE.PointLight(0xd4aa6a, 3, 20).position.set(0,4,6) && new THREE.PointLight(0xd4aa6a,3,20))
+    const pl = new THREE.PointLight(0xd4aa6a,4,22); pl.position.set(0,4,6); scene.add(pl)
+    scene.add(new THREE.AmbientLight(0x332a20,2))
+
+    const sphereData = [
+      { color:0xb8924a, angle:Math.PI*0.5, r:3.2 },
+      { color:0xd4aa6a, angle:Math.PI*1.17, r:3.2 },
+      { color:0x8a6830, angle:Math.PI*1.83, r:3.2 },
+    ]
+    const meshes = sphereData.map(({ color, angle, r }) => {
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.65, 32, 32),
+        new THREE.MeshStandardMaterial({ color, metalness:0.7, roughness:0.3, emissive:new THREE.Color(color).multiplyScalar(0.15) })
+      )
+      mesh.position.set(Math.cos(angle)*r, 0, Math.sin(angle)*r*0.45)
+      scene.add(mesh)
+      return { mesh, angle, r }
+    })
+    // Center gem
+    scene.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.45,0), new THREE.MeshStandardMaterial({ color:0xd4aa6a, metalness:0.9, roughness:0.08, emissive:0xb8924a, emissiveIntensity:0.4 })))
+    // Lines
+    const lm = new THREE.LineBasicMaterial({ color:0xb8924a, transparent:true, opacity:0.25 })
+    for(let i=0;i<3;i++) { const j=(i+1)%3; scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([meshes[i].mesh.position.clone(),meshes[j].mesh.position.clone()]),lm)) }
+
+    let f=0, animId
+    const animate = () => {
+      animId=requestAnimationFrame(animate); f+=0.006
+      meshes.forEach(({mesh,angle,r})=>{ mesh.position.x=Math.cos(angle+f)*r; mesh.position.z=Math.sin(angle+f)*r*0.45; mesh.rotation.y+=0.01 })
+      renderer.render(scene, camera)
+    }
+    animate()
+    return () => { cancelAnimationFrame(animId); renderer.dispose() }
+  }, [])
+  return <canvas ref={canvasRef} style={{ width:'100%', height:'100%', display:'block' }} />
 }
 
-// ─── PRESENTER SECTIONS ────────────────────────────────────────────────────
+// ═══════════════════════════════════════
+// THREE.JS SCENE: THREAD SPOOLS
+// ═══════════════════════════════════════
+function SpoolScene() {
+  const canvasRef = useRef(null)
+  useEffect(() => {
+    const canvas = canvasRef.current; if (!canvas) return
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(canvas.offsetWidth, canvas.offsetHeight)
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera(55, canvas.offsetWidth/canvas.offsetHeight, 0.1, 100)
+    camera.position.set(0,2,11); camera.lookAt(0,0,0)
+    scene.add(new THREE.AmbientLight(0x332a20,2.5))
+    const pl = new THREE.PointLight(0xd4aa6a,8,25); pl.position.set(3,5,5); scene.add(pl)
+    const pl2 = new THREE.PointLight(0xc4857a,4,18); pl2.position.set(-4,-2,3); scene.add(pl2)
+
+    const colors = [0xb8924a, 0xd4aa6a, 0xc4857a, 0x8a6830, 0xe8d0a0, 0xa07840]
+    const spools = []
+    for(let i=0;i<6;i++) {
+      const grp = new THREE.Group()
+      const bodyMat = new THREE.MeshStandardMaterial({ color:colors[i%colors.length], metalness:0.3, roughness:0.65 })
+      grp.add(new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,0.72,32), bodyMat))
+      ;[-0.4,0.4].forEach(y => {
+        const fl = new THREE.Mesh(new THREE.CylinderGeometry(0.56,0.56,0.09,32), new THREE.MeshStandardMaterial({ color:0x7a5820, metalness:0.6, roughness:0.4 }))
+        fl.position.y=y; grp.add(fl)
+      })
+      for(let j=0;j<7;j++) {
+        const t = new THREE.Mesh(new THREE.TorusGeometry(0.42,0.018,8,32), new THREE.MeshStandardMaterial({ color:colors[i%colors.length], metalness:0.1, roughness:0.9 }))
+        t.rotation.x=Math.PI/2; t.position.y=-0.27+j*0.09; grp.add(t)
+      }
+      const angle=(i/6)*Math.PI*2, r=3.0+(i%2)*0.7
+      grp.position.set(Math.cos(angle)*r, (Math.random()-0.5)*1.6, Math.sin(angle)*r*0.5)
+      grp.rotation.z=(Math.random()-0.5)*0.5
+      scene.add(grp)
+      spools.push({ grp, angle, r, phase:Math.random()*Math.PI*2, spd:0.004+Math.random()*0.003 })
+    }
+    // Thread lines
+    for(let i=0;i<10;i++) {
+      const pts = Array.from({length:8},()=>new THREE.Vector3((Math.random()-0.5)*13,(Math.random()-0.5)*6,(Math.random()-0.5)*4))
+      scene.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),50,0.009,4,false), new THREE.MeshBasicMaterial({ color:0xd4aa6a, transparent:true, opacity:0.2 })))
+    }
+
+    let f=0, animId
+    const animate=()=>{
+      animId=requestAnimationFrame(animate); f+=0.01
+      spools.forEach(({grp,angle,r,phase,spd})=>{
+        const a=angle+f*spd*8
+        grp.position.x=Math.cos(a)*r; grp.position.z=Math.sin(a)*r*0.5
+        grp.position.y=Math.sin(f*0.7+phase)*0.45
+        grp.rotation.y+=0.014
+      })
+      pl.position.x=Math.cos(f*0.35)*5; pl.position.y=Math.sin(f*0.25)*3
+      renderer.render(scene,camera)
+    }
+    animate()
+    return () => { cancelAnimationFrame(animId); renderer.dispose() }
+  }, [])
+  return <canvas ref={canvasRef} style={{ width:'100%', height:'100%', display:'block' }} />
+}
+
+// ═══════════════════════════════════════
+// THREE.JS SCENE: FABRIC WAVE
+// ═══════════════════════════════════════
+function FabricScene({ dark=false }) {
+  const canvasRef = useRef(null)
+  useEffect(() => {
+    const canvas = canvasRef.current; if (!canvas) return
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(canvas.offsetWidth, canvas.offsetHeight)
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera(50, canvas.offsetWidth/canvas.offsetHeight, 0.1, 100)
+    camera.position.set(0,4,9); camera.lookAt(0,0,0)
+    scene.add(new THREE.AmbientLight(0x332a20, dark?1.8:3))
+    const pl = new THREE.PointLight(0xd4aa6a,5,18); pl.position.set(2,4,5); scene.add(pl)
+
+    const W=44, H=44
+    const geo1 = new THREE.PlaneGeometry(13,13,W,H)
+    scene.add(new THREE.Mesh(geo1, new THREE.MeshStandardMaterial({ color:dark?0x1a1612:0xf0ebe0, wireframe:true, transparent:true, opacity:dark?0.22:0.32 })))
+    const geo2 = new THREE.PlaneGeometry(13,13,W,H)
+    scene.add(new THREE.Mesh(geo2, new THREE.MeshBasicMaterial({ color:0xb8924a, wireframe:true, transparent:true, opacity:dark?0.08:0.06 })))
+
+    // Pins
+    for(let i=0;i<14;i++) {
+      const pin = new THREE.Group()
+      pin.add(new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.005,0.65,6), new THREE.MeshStandardMaterial({ color:0xd4aa6a, metalness:0.95, roughness:0.05 })))
+      pin.add(Object.assign(new THREE.Mesh(new THREE.SphereGeometry(0.04,12,12), new THREE.MeshStandardMaterial({ color:0xd4aa6a, metalness:0.8, roughness:0.2 })), {position:{x:0,y:0.34,z:0}}))
+      pin.position.set((Math.random()-0.5)*9, 0.35+Math.random()*0.4, (Math.random()-0.5)*5)
+      pin.rotation.z=(Math.random()-0.5)*0.4
+      scene.add(pin)
+    }
+
+    const origPos = [...geo1.attributes.position.array]
+    let f=0, animId
+    const animate=()=>{
+      animId=requestAnimationFrame(animate); f+=0.016
+      const arr=geo1.attributes.position.array, arr2=geo2.attributes.position.array
+      for(let i=0;i<=(W);i++) for(let j=0;j<=(H);j++) {
+        const idx=(i*(H+1)+j)*3
+        arr[idx+2]=Math.sin(origPos[idx]*0.6+f)*Math.cos(origPos[idx+1]*0.5+f*0.7)*0.38
+        arr2[idx+2]=arr[idx+2]*0.75
+      }
+      geo1.attributes.position.needsUpdate=true; geo2.attributes.position.needsUpdate=true
+      geo1.computeVertexNormals()
+      renderer.render(scene,camera)
+    }
+    animate()
+    return () => { cancelAnimationFrame(animId); renderer.dispose() }
+  }, [])
+  return <canvas ref={canvasRef} style={{ width:'100%', height:'100%', display:'block' }} />
+}
+
+// ═══════════════════════════════════════
+// THREE.JS SCENE: FLOATING GEMS
+// ═══════════════════════════════════════
+function GemScene() {
+  const canvasRef = useRef(null)
+  useEffect(() => {
+    const canvas = canvasRef.current; if (!canvas) return
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(canvas.offsetWidth, canvas.offsetHeight)
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera(55, canvas.offsetWidth/canvas.offsetHeight, 0.1, 100)
+    camera.position.set(0,0,11)
+    scene.add(new THREE.AmbientLight(0x332a20,2.5))
+    const pl1=new THREE.PointLight(0xd4aa6a,10,22); pl1.position.set(4,4,4); scene.add(pl1)
+    const pl2=new THREE.PointLight(0xc4857a,5,18); pl2.position.set(-4,-3,3); scene.add(pl2)
+
+    const gColors=[0xb8924a,0xd4aa6a,0xc4857a,0xe8d0a0,0x8a6830,0xd4b896]
+    const gems=[]
+    for(let i=0;i<16;i++) {
+      const sz=0.2+Math.random()*0.65
+      const mesh=new THREE.Mesh(
+        new THREE.OctahedronGeometry(sz,0),
+        new THREE.MeshStandardMaterial({ color:gColors[i%gColors.length], metalness:0.85, roughness:0.1, emissive:0xb8924a, emissiveIntensity:0.12, transparent:true, opacity:0.82 })
+      )
+      mesh.position.set((Math.random()-0.5)*13,(Math.random()-0.5)*9,(Math.random()-0.5)*5)
+      mesh.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,0)
+      scene.add(mesh)
+      gems.push({ mesh, phase:Math.random()*Math.PI*2, spd:0.4+Math.random()*0.9, oy:mesh.position.y })
+    }
+
+    let f=0, animId
+    const animate=()=>{
+      animId=requestAnimationFrame(animate); f+=0.01
+      gems.forEach(({mesh,phase,spd,oy})=>{ mesh.rotation.x+=0.005*spd; mesh.rotation.y+=0.008*spd; mesh.position.y=oy+Math.sin(f*spd+phase)*0.32 })
+      pl1.position.x=Math.cos(f*0.28)*5; pl1.position.y=Math.sin(f*0.2)*3
+      renderer.render(scene,camera)
+    }
+    animate()
+    return () => { cancelAnimationFrame(animId); renderer.dispose() }
+  }, [])
+  return <canvas ref={canvasRef} style={{ width:'100%', height:'100%', display:'block' }} />
+}
+
+// ═══════════════════════════════════════
+// THREE.JS SCENE: PARTICLE ROSE
+// ═══════════════════════════════════════
+function RoseScene() {
+  const canvasRef = useRef(null)
+  useEffect(() => {
+    const canvas = canvasRef.current; if (!canvas) return
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(canvas.offsetWidth, canvas.offsetHeight)
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera(55, canvas.offsetWidth/canvas.offsetHeight, 0.1, 100)
+    camera.position.set(0,0,11)
+
+    const N=6000, pos=new Float32Array(N*3), col=new Float32Array(N*3)
+    const c1=new THREE.Color(0xd4aa6a), c2=new THREE.Color(0xc4857a), c3=new THREE.Color(0xb8924a)
+    for(let i=0;i<N;i++) {
+      const theta=(i/N)*Math.PI*22, r=4*Math.cos(3*theta)+(Math.random()-0.5)*0.9
+      pos[i*3]=r*Math.cos(theta)+(Math.random()-0.5)*0.3
+      pos[i*3+1]=r*Math.sin(theta)+(Math.random()-0.5)*0.3
+      pos[i*3+2]=(Math.random()-0.5)*2.8
+      const t=Math.random(), c=t<0.45?c1.clone().lerp(c2,t/0.45):c2.clone().lerp(c3,(t-0.45)/0.55)
+      col[i*3]=c.r; col[i*3+1]=c.g; col[i*3+2]=c.b
+    }
+    const pg=new THREE.BufferGeometry()
+    pg.setAttribute('position', new THREE.BufferAttribute(pos,3))
+    pg.setAttribute('color', new THREE.BufferAttribute(col,3))
+    const points=new THREE.Points(pg, new THREE.PointsMaterial({ size:0.048, vertexColors:true, transparent:true, opacity:0.88 }))
+    scene.add(points)
+
+    for(let i=0;i<5;i++) {
+      const t=new THREE.Mesh(new THREE.TorusGeometry(0.5+i*0.42,0.022,8,64), new THREE.MeshBasicMaterial({ color:0xd4aa6a, transparent:true, opacity:0.28-i*0.04 }))
+      t.rotation.x=(Math.random()-0.5)*0.5; scene.add(t)
+    }
+
+    let f=0, animId
+    const animate=()=>{
+      animId=requestAnimationFrame(animate); f+=0.005
+      points.rotation.z=f*0.14; points.rotation.x=Math.sin(f*0.3)*0.12
+      renderer.render(scene,camera)
+    }
+    animate()
+    return () => { cancelAnimationFrame(animId); renderer.dispose() }
+  }, [])
+  return <canvas ref={canvasRef} style={{ width:'100%', height:'100%', display:'block' }} />
+}
+
+// ═══════════════════════════════════════
+// PRESENTER DATA
+// ═══════════════════════════════════════
 const BANT_ITEMS = [
-  { id: 'budget', label: '予算：外注にかけられる予算感はどれくらいか？' },
-  { id: 'authority', label: '決裁者：最終判断は誰が担当されるか？' },
-  { id: 'needs', label: 'ニーズ：特に興味を持ったポイントはどこか？' },
-  { id: 'timeline', label: 'タイムライン：いつ頃から導入をお考えか？' },
+  { id:'budget', label:'予算：外注にかけられる予算感はどれくらいか？' },
+  { id:'authority', label:'決裁者：最終判断は誰が担当されるか？' },
+  { id:'needs', label:'ニーズ：特に興味を持ったポイントはどこか？' },
+  { id:'timeline', label:'タイムライン：いつ頃から導入をお考えか？' },
 ]
-
 const OBJECTIONS = [
-  {
-    trigger: '検討したい',
-    response: 'ありがとうございます。仕様・納期の詳細は技術者との打ち合わせでないと正確にお伝えできない部分が多いです。30分ほどのお時間で御社の案件に当てはめた具体的な進め方をご提示できますので、次回のお時間だけいただければと思います。'
-  },
-  {
-    trigger: '見送りたい',
-    response: '率直にお話しいただきありがとうございます。外注先としてどこまでお役に立てるかは詳細を確認してみないと判断が難しい部分があります。情報整理の場として、次回30分ほどお時間をいただければ、御社にとってメリットがあるかどうかを一緒に確認できればと思います。'
-  },
-  {
-    trigger: '会社の確認が必要',
-    response: '承知いたしました。慎重に進められるのは良いことだと思います。判断材料を揃える意味でも、仕様や納期の詳細は二次商談で具体的にお伝えできます。次回は御社の体制に合わせた具体例をご用意いたしますので、30分ほどお時間をいただければと思います。'
-  },
+  { trigger:'検討したい', response:'ありがとうございます。仕様・納期の詳細は技術者との打ち合わせでないと正確にお伝えできない部分が多いです。30分ほどのお時間で御社の案件に当てはめた具体的な進め方をご提示できますので、次回のお時間だけいただければと思います。' },
+  { trigger:'見送りたい', response:'率直にお話しいただきありがとうございます。外注先としてどこまでお役に立てるかは詳細を確認してみないと判断が難しい部分があります。情報整理の場として、次回30分ほどお時間をいただければ御社にとってメリットがあるかどうかを一緒に確認できればと思います。' },
+  { trigger:'会社の確認が必要', response:'承知いたしました。慎重に進められるのは良いことだと思います。判断材料を揃える意味でも、仕様や納期の詳細は二次商談で具体的にお伝えできます。次回は御社の体制に合わせた具体例をご用意いたしますので、30分ほどお時間をいただければと思います。' },
 ]
-
 const P_SECTIONS = [
-  {
-    id: 'intro',
-    label: 'イントロ',
-    customerSection: 'intro',
-    script: `本日はお時間をいただきありがとうございます。
-株式会社aim roseの〇〇と申します。
-
-本日は、御社で対応が難しいフルオーダー案件や特殊案件を、弊社が外注先としてお手伝いできる可能性についてお話しできればと思っております。
-
-御社の既存のお客様により良いご提案ができるようになる点や、機会損失を防ぐ点など、メリットを感じていただける内容になっているかと思いますので、ぜひ気軽にお聞きいただければ幸いです。
-
-どうぞよろしくお願いいたします。`,
-  },
-  {
-    id: 'icebreak',
-    label: 'アイスブレイク',
-    customerSection: null,
-    script: `●●様、最初に1点お伺いしてもよろしいでしょうか？
-先日は突然のお電話にも関わらず、ご興味をいただけた理由を先にお伺いしてもよろしいでしょうか？
-
-（相手の回答を受ける）
-
-ありがとうございます。そういった背景からご興味をお持ちいただいたんですね。
-
-もしよろしければ、現在どのような案件でお困りの場面が多いのか、少しお聞かせいただけますでしょうか。
-例えば、特殊体型のお客様の対応が難しいケースや、素材の制約でお断りされているケースなど、どのあたりが課題になりやすいでしょうか。
-
-なるほど、ありがとうございます。
-お話を伺っていると、弊社がお役に立てる場面が多そうだと感じました。`,
-  },
-  {
-    id: 'background',
-    label: '提携の背景',
-    customerSection: 'background',
-    script: `三方よしの考え方でご説明いたします。
-
-【御社のメリット】
-フルオーダー対応で受注機会が広がり、より多くのお客様のニーズに応えられるようになります。機会損失が減ります。
-
-【お客様のメリット】
-満足度がアップします。より幅広い選択肢と高品質な製品を提供することで、お客様の期待に応えます。
-
-【弊社のメリット】
-長年培ってきた技術と経験を最大限に活用できます。
-
-この三者にとってプラスになる関係が、今回のご提案の核心です。`,
-  },
-  {
-    id: 'strength',
-    label: '弊社の強み',
-    customerSection: 'strength',
-    script: `弊社には3つの大きな強みがございます。
-
-①職人の技術
-ジバンシー、コムデギャルソンなどのハイブランドを担う縫製工場で修得した技術を持っています。20年以上の実績で多ジャンル、フルアイテムの製作をしてきました。
-
-②総合的な製作能力
-デザイン、パターン、企画、縫製全てを経験し、フルオーダー製作を進めるノウハウを持っています。
-
-③過去の実績
-小澤征爾指揮による演劇舞台の衣装製作、森英恵デザイナーのサンプル製作、東京・関西コレクション衣装製作、宝塚歌劇団番組での製作指導など幅広い分野での実績があります。`,
-  },
-  {
-    id: 'usp',
-    label: 'USPサマリー',
-    customerSection: null,
-    script: `御社にメリットがあるポイントを3つにまとめます。
-
-【1. 対応範囲の広さ】
-特殊体型・特殊素材・特殊仕様の案件でも、職人の技術を活かして柔軟に対応できます。
-
-【2. 制作キャパシティの柔軟さ】
-一点物からまとまった数量まで、必要に応じて連携先とも協力しながら対応できるため、急な案件でもご相談いただけます。
-
-【3. 御社のブランド価値を損なわない品質】
-著名な経営者層のスーツ制作実績もあり、細部まで丁寧に仕上げる技術力を評価いただいております。`,
-  },
-  {
-    id: 'service',
-    label: 'サービス内容',
-    customerSection: 'service',
-    script: `外注としてご依頼いただく場合は、まず案件内容をヒアリングし、仕様・素材・納期などを確認したうえで制作に入ります。
-
-一点物のフルオーダーから、ユニフォームのような複数着の制作まで幅広く対応可能です。
-
-提携方法は2種類ございます：
-① 非対面式受注（フリーサイズサンプルによる）
-② 対面式受注（フルオーダー出張対応）
-
-次のスライドで詳しくご説明いたします。`,
-  },
-  {
-    id: 'method1',
-    label: '提携方法①',
-    customerSection: 'method1',
-    script: `【提携方法1：非対面式受注】
-フリーサイズ（S〜L対応）のデザインサンプルを店内またはHP上に展示。
-お客様の体型に合わせて丈だけの簡単な調整で受注できます。
-
-フロー：
-サンプル展示 → 受注（丈調整） → 資材発注 → 弊社で製作 → 納品
-
-納期：材料が揃ってから1ヶ月半〜2ヶ月
-
-料金例（税別）：
-・コート：サンプル特別価格 ¥50,000 / 通常 ¥100,000
-・スーツ：サンプル特別価格 ¥50,000 / 通常 ¥100,000
-・ジャケット：サンプル特別価格 ¥35,000 / 通常 ¥70,000
-
-販売価格は御社で自由に設定いただけます。`,
-  },
-  {
-    id: 'method2',
-    label: '提携方法②',
-    customerSection: 'method2',
-    script: `【提携方法2：フルオーダー対面式受注】
-お客様からフルオーダーの依頼を受けたら、弊社に出張依頼いただきます。
-
-フロー：
-お客様からの依頼 → 弊社に出張依頼・日程決定 → オーダー当日（御社に訪問・共同受注） → 仮縫い1〜2回 → 弊社で製作 → 納品
-
-納期：2〜3ヶ月（仮縫いのタイミングにより前後）
-
-出張費（受注日・仮縫い日の計2〜3回分含む）：
-・近距離（20km以内）：¥10,000 + 交通費
-・中距離（20〜50km）：¥20,000 + 交通費
-・長距離（50km以上）：¥40,000 + 交通費`,
-  },
-  {
-    id: 'pricing',
-    label: '料金表',
-    customerSection: 'pricing',
-    script: `【フルオーダー料金表（税別）】
-
-アイテム別 パターン価格 / 製作価格：
-・コート：¥55,000〜 / ¥90,000〜
-・ジャケット・ブルゾン：¥50,000〜 / ¥70,000〜
-・ワンピース：¥45,000〜 / ¥60,000〜
-・パンツ・スカート：¥35,000〜 / ¥30,000〜
-・シャツ：¥35,000〜 / ¥35,000〜
-
-オプション：
-・革の場合：別途 ¥20,000
-・柄合わせ：別途 ¥10,000
-
-重要ポイント：
-同じパターンを利用する場合、2着目以降はパターン代不要です。
-ご紹介いただいたお客様が弊社でリピートされる場合、以後のオーダーの度に御社に20%キャッシュバックいたします。`,
-  },
-  {
-    id: 'wholesale',
-    label: '卸販売',
-    customerSection: 'wholesale',
-    script: `【卸販売もご提供しています】
-
-ポケットチーフ、ミニネクタイ、ミニ蝶ネクタイなどのアクセサリーを卸値半額でご提供しています。
-
-ポケットチーフ：
-・1柄タイプ 定価2,900円 → 卸値 1,450円
-・2柄タイプ 定価3,500円 → 卸値 1,750円
-
-ミニネクタイ・ミニ蝶ネクタイ：
-・定価3,900円 → 卸値 1,950円
-
-最低発注価格 ¥10,000〜、送料別途
-生地持ち込みチーフ加工賃：1枚 ¥3,000 / 10枚〜 ¥1,000/枚
-
-ECサイト：https://aimrose.official.ec/`,
-  },
-  {
-    id: 'hearing',
-    label: 'ヒアリング',
-    customerSection: null,
-    bant: true,
-    script: `すいません、ここまで一方的にお話ししてしまいました。
-ここからは御社の現状や、今日お聞きいただいた内容の中で「ここが気になる」「少し深掘りしたい」と感じられた部分を伺えればと思っています。
-
-【先方の取り組み・課題について】
-・特殊体型のお客様をお断りする場面はどれくらいあるか
-・仕様の制約で対応が難しいケースはあるか
-・外注先を探されたことがあるか、その際の不安や課題
-・今後強化したいサービス領域や伸ばしたい方向性
-
-【BANT確認 ↓ チェックリストを活用してください】`,
-  },
-  {
-    id: 'qa',
-    label: 'Q&A想定',
-    customerSection: null,
-    script: `【想定される質疑と応答】
-
-Q1: どこまでの仕様に対応できますか？
-→ 幅広く対応可能。特殊体型・素材も含め柔軟に。詳細は技術者との打ち合わせで確認。
-
-Q2: 納期はどれくらい見ておけばよいですか？
-→ 案件内容によって変動。事前に無理のないスケジュールをご相談。詳細は二次商談で。
-
-Q3: 一点物でも依頼できますか？
-→ はい、問題ありません。むしろ一点物のフルオーダーは得意です。
-
-Q4: 複数着も可能ですか？
-→ 可能。ロットが少ない場合は単価が上がることがありますが事前にご相談。
-
-Q5: 品質面が心配です。
-→ 著名な経営者層のスーツ制作実績あり。細部まで丁寧な技術力を評価いただいています。
-
-Q6: 料金体系は？
-→ 案件内容によって変動。詳細は二次商談で仕様確認後にご提示。
-
-Q7: 急ぎの案件でも対応できますか？
-→ 内容によりますが可能な範囲で調整。納期は案件ごとに確認。`,
-  },
-  {
-    id: 'closing',
-    label: 'クロージング',
-    customerSection: 'steps',
-    script: `ありがとうございます。
-もしよろしければ、まずは御社の体制やご希望を伺いながら、最適なプランを具体化させていただければと思っています。
-
-「〇月〇日（〇曜日）」か「〇月〇日（〇曜日）」にお時間いただくことは可能でしょうか？
-ご都合のよろしい方をお聞かせいただけると助かります。
-
-【日程調整トーク】
-お時間は午前と午後はどちらがご都合よろしいでしょうか。
-●時と●時ではどちらがよろしいでしょうか。
-では、●月●日の●時でお時間を頂戴できればと思います。
-
-本日、私の方からのご案内は以上となりますが、何かご不明点はございますか？`,
-    objections: true,
-  },
-  {
-    id: 'contact',
-    label: 'お問い合わせ',
-    customerSection: 'contact',
-    script: `本日はありがとうございました。
-
-【お問い合わせ先】
-株式会社 aim-rose（エイムローズ）
-〒542-0081 大阪市中央区南船場2-2-28
-ジェイ・プライド順慶ビル205
-
-TEL: 06-6261-7373
-FAX: 06-6261-7372
-HP: https://aim-rose-order.com/
-
-提携店様専用公式ラインもございます。
-次回の打ち合わせ日程につきましては、改めてご連絡させていただきます。`,
-  },
+  { id:'intro', label:'イントロ', customerSection:'intro', script:`本日はお時間をいただきありがとうございます。\n株式会社aim roseの〇〇と申します。\n\n本日は、御社で対応が難しいフルオーダー案件や特殊案件を、弊社が外注先としてお手伝いできる可能性についてお話しできればと思っております。\n\n御社の既存のお客様により良いご提案ができるようになる点や、機会損失を防ぐ点など、メリットを感じていただける内容になっているかと思いますので、ぜひ気軽にお聞きいただければ幸いです。` },
+  { id:'icebreak', label:'アイスブレイク', customerSection:null, script:`●●様、最初に1点お伺いしてもよろしいでしょうか？\n先日は突然のお電話にも関わらず、ご興味をいただけた理由を先にお伺いしてもよろしいでしょうか？\n\n（相手の回答を受ける）\n\nありがとうございます。そういった背景からご興味をお持ちいただいたんですね。\n\nもしよろしければ、現在どのような案件でお困りの場面が多いのか、少しお聞かせいただけますでしょうか。` },
+  { id:'background', label:'提携の背景', customerSection:'background', script:`三方よしの考え方でご説明いたします。\n\n【御社のメリット】\nフルオーダー対応で受注機会が広がり、機会損失が減ります。\n\n【お客様のメリット】\n満足度がアップします。より幅広い選択肢と高品質な製品を提供できます。\n\n【弊社のメリット】\n長年培ってきた技術と経験を最大限に活用できます。` },
+  { id:'strength', label:'弊社の強み', customerSection:'strength', script:`①職人の技術\nジバンシー、コムデギャルソンなどのハイブランドを担う縫製工場で修得した技術。20年以上の実績。\n\n②総合的な製作能力\nデザイン、パターン、企画、縫製全てを経験し、フルオーダー製作のノウハウを持っています。\n\n③過去の実績\n小澤征爾指揮演劇衣装・森英恵デザイナーサンプル・東京/関西コレクション・宝塚歌劇団番組での製作指導など。` },
+  { id:'usp', label:'USPサマリー', customerSection:null, script:`3つのメリット：\n\n【1. 対応範囲の広さ】\n特殊体型・特殊素材・特殊仕様の案件でも柔軟に対応できます。\n\n【2. 制作キャパシティの柔軟さ】\n一点物から複数着まで対応。急な案件もご相談いただけます。\n\n【3. ブランド価値を損なわない品質】\n著名な経営者層のスーツ制作実績あり。細部まで丁寧な技術力を評価いただいています。` },
+  { id:'service', label:'サービス内容', customerSection:'service', script:`外注としてご依頼いただく場合は、まず案件内容をヒアリングし、仕様・素材・納期などを確認したうえで制作に入ります。\n\n提携方法は2種類ございます：\n① 非対面式受注（フリーサイズサンプルによる）\n② 対面式受注（フルオーダー出張対応）` },
+  { id:'method1', label:'提携方法①', customerSection:'method1', script:`【提携方法1：非対面式受注】\nフリーサイズ（S〜L対応）のデザインサンプルを店内またはHP上に展示。丈だけの簡単な調整で受注できます。\n\n料金例（税別）：\n・コート：サンプル ¥50,000 / 通常 ¥100,000\n・スーツ：サンプル ¥50,000 / 通常 ¥100,000\n・ジャケット：サンプル ¥35,000 / 通常 ¥70,000\n\n納期：材料が揃ってから1ヶ月半〜2ヶ月` },
+  { id:'method2', label:'提携方法②', customerSection:'method2', script:`【提携方法2：フルオーダー対面式受注】\nお客様からフルオーダーの依頼を受けたら、弊社に出張依頼いただきます。\n\n出張費（受注日・仮縫い日の計2〜3回分含む）：\n・近距離（20km以内）：¥10,000 + 交通費\n・中距離（〜50km）：¥20,000 + 交通費\n・長距離（50km以上）：¥40,000 + 交通費\n\n納期：2〜3ヶ月（仮縫いのタイミングにより前後）` },
+  { id:'pricing', label:'料金表', customerSection:'pricing', script:`【フルオーダー料金表（税別）】\n・コート：パターン ¥55,000〜 / 製作 ¥90,000〜\n・ジャケット・ブルゾン：¥50,000〜 / ¥70,000〜\n・ワンピース：¥45,000〜 / ¥60,000〜\n・パンツ・スカート：¥35,000〜 / ¥30,000〜\n・シャツ：¥35,000〜 / ¥35,000〜\n\n✦ 2着目以降、同パターンはパターン代不要\n✦ ご紹介リピート → 御社に20%キャッシュバック` },
+  { id:'hearing', label:'ヒアリング', customerSection:null, bant:true, script:`ここからは御社の現状を伺えればと思います。\n\n・特殊体型のお客様をお断りする場面はどれくらいあるか\n・仕様の制約で対応が難しいケースはあるか\n・外注先を探されたことがあるか、その際の不安\n・今後強化したいサービス領域\n\n【BANT確認 ↓ チェックリストを活用してください】` },
+  { id:'qa', label:'Q&A想定', customerSection:null, script:`Q1: 仕様対応範囲は？ → 特殊体型・素材含め柔軟に。詳細は技術者との打ち合わせで。\nQ2: 納期は？ → 案件内容により変動。詳細は二次商談で。\nQ3: 一点物でも？ → はい、むしろ一点物フルオーダーは得意です。\nQ4: 複数着も？ → 可能。ロット少ない場合は単価が上がりますが事前にご相談。\nQ5: 品質面は？ → 著名な経営者層のスーツ制作実績あり。\nQ6: 料金は？ → 案件内容により変動。二次商談で仕様確認後にご提示。\nQ7: 急ぎの案件は？ → 内容により可能な範囲で調整。` },
+  { id:'closing', label:'クロージング', customerSection:'steps', objections:true, script:`ありがとうございます。\nもしよろしければ、まずは御社の体制やご希望を伺いながら、最適なプランを具体化させていただければと思っています。\n\n「〇月〇日（〇曜日）」か「〇月〇日（〇曜日）」にお時間いただくことは可能でしょうか？\n\n【日程調整】\nお時間は午前と午後はどちらがご都合よろしいでしょうか。\n●時と●時ではどちらがよろしいでしょうか。\nでは、●月●日の●時でよろしくお願いいたします。` },
+  { id:'contact', label:'お問い合わせ', customerSection:'contact', script:`本日はありがとうございました。\n\n株式会社 aim-rose（エイムローズ）\n〒542-0081 大阪市中央区南船場2-2-28\nジェイ・プライド順慶ビル205\n\nTEL: 06-6261-7373 / FAX: 06-6261-7372\nHP: https://aim-rose-order.com/\n\n提携店様専用公式ラインもございます。` },
 ]
 
-// ─── DESIGN TOKENS ─────────────────────────────────────────────────────────
-const C = {
-  ivory: '#f5f0e8',
-  cream: '#ede7d9',
-  warmWhite: '#faf7f2',
-  charcoal: '#1a1612',
-  darkBrown: '#2c2318',
-  gold: '#b8924a',
-  goldLight: '#d4aa6a',
-  goldDark: '#8a6830',
-  rose: '#c4857a',
-  slate: '#4a4540',
-  muted: '#7a7068',
-  // dark (presenter)
-  bg: '#0d0c0a',
-  surface: '#181614',
-  border: '#2a2520',
-  textDim: '#6a6058',
-  textMid: '#a09080',
-  textLight: '#e8ddd0',
-}
-
-// ─── CUSTOMER VIEW ─────────────────────────────────────────────────────────
+// ═══════════════════════════════════════
+// CUSTOMER VIEW
+// ═══════════════════════════════════════
 function CustomerView() {
   const [scrollPct, setScrollPct] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const sectionRefs = useRef({})
-
-  const sections = [
-    'intro', 'background', 'strength', 'service',
-    'method1', 'method2', 'pricing', 'wholesale', 'steps', 'contact'
-  ]
-
-  const sectionLabels = {
-    intro: '提携のご提案', background: '提携の背景', strength: '弊社の強み',
-    service: 'サービス内容', method1: '提携方法①', method2: '提携方法②',
-    pricing: '料金表', wholesale: '卸販売', steps: '提携開始', contact: 'お問い合わせ'
-  }
+  const sections = ['intro','background','strength','service','method1','method2','pricing','wholesale','steps','contact']
+  const labels = { intro:'提携のご提案', background:'提携の背景', strength:'弊社の強み', service:'サービス内容', method1:'提携方法①', method2:'提携方法②', pricing:'料金表', wholesale:'卸販売', steps:'提携開始', contact:'お問い合わせ' }
 
   useEffect(() => {
-    const onScroll = () => {
-      const el = document.documentElement
-      const pct = el.scrollTop / (el.scrollHeight - el.clientHeight)
-      setScrollPct(Math.min(1, Math.max(0, pct)))
-    }
-    window.addEventListener('scroll', onScroll)
-    return () => window.removeEventListener('scroll', onScroll)
+    const h = () => setScrollPct(Math.min(1, document.documentElement.scrollTop/(document.documentElement.scrollHeight-document.documentElement.clientHeight)||0))
+    window.addEventListener('scroll', h); return () => window.removeEventListener('scroll', h)
   }, [])
 
-  // IntersectionObserver fade-in
   useEffect(() => {
-    const obs = new IntersectionObserver((entries) => {
-      entries.forEach(e => {
-        if (e.isIntersecting) {
-          e.target.style.opacity = '1'
-          e.target.style.transform = 'translateY(0)'
-        }
-      })
-    }, { threshold: 0.1 })
-    document.querySelectorAll('.fade-section').forEach(el => obs.observe(el))
+    const obs = new IntersectionObserver(entries => entries.forEach(e => { if(e.isIntersecting) { e.target.style.opacity='1'; e.target.style.transform='translateY(0)' } }), { threshold:0.08 })
+    document.querySelectorAll('.fi').forEach(el => obs.observe(el))
     return () => obs.disconnect()
   }, [])
 
-  const handleSync = useCallback((sectionId) => {
-    const el = sectionRefs.current[sectionId]
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [])
+  const handleSync = useCallback(id => sectionRefs.current[id]?.scrollIntoView({ behavior:'smooth', block:'start' }), [])
   useSyncReceive(handleSync)
 
-  const scrollTo = (id) => {
-    const el = sectionRefs.current[id]
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    setSidebarOpen(false)
-  }
+  const fi = { opacity:0, transform:'translateY(50px)', transition:'opacity 0.9s ease, transform 0.9s ease' }
 
   return (
-    <div style={{ background: C.warmWhite, color: C.charcoal, fontFamily: "'Noto Sans JP', sans-serif", minHeight: '100vh' }}>
-
-      {/* Progress Bar */}
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: 3, zIndex: 1000, background: '#e8e0d4' }}>
-        <div style={{
-          height: '100%', width: `${scrollPct * 100}%`,
-          background: `linear-gradient(90deg, ${C.goldDark}, ${C.goldLight})`,
-          transition: 'width 0.1s linear'
-        }} />
+    <div style={{ background:C.warmWhite, color:C.charcoal, fontFamily:"'Noto Sans JP', sans-serif" }}>
+      {/* Progress */}
+      <div style={{ position:'fixed', top:0, left:0, right:0, height:3, zIndex:1000, background:'#e8e0d4' }}>
+        <div style={{ height:'100%', width:`${scrollPct*100}%`, background:`linear-gradient(90deg,${C.goldDark},${C.goldLight})`, transition:'width 0.1s' }} />
       </div>
-
       {/* Sidebar */}
-      <div style={{
-        position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 900,
-        width: sidebarOpen ? 220 : 48, transition: 'width 0.3s ease',
-        background: sidebarOpen ? 'rgba(26,22,18,0.97)' : 'transparent',
-        overflow: 'hidden', display: 'flex', flexDirection: 'column',
-      }}>
-        <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{
-          width: 48, height: 48, background: 'none', border: 'none', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          color: sidebarOpen ? C.goldLight : C.gold,
-        }}>
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-            {sidebarOpen
-              ? <path d="M15 5L5 15M5 5l10 10" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-              : <><rect y="4" width="20" height="1.5" rx="1"/><rect y="9.25" width="20" height="1.5" rx="1"/><rect y="14.5" width="20" height="1.5" rx="1"/></>
-            }
+      <div style={{ position:'fixed', top:0, left:0, bottom:0, zIndex:900, width:sidebarOpen?220:48, transition:'width 0.3s ease', background:sidebarOpen?'rgba(26,22,18,0.97)':'transparent', overflow:'hidden', display:'flex', flexDirection:'column' }}>
+        <button onClick={()=>setSidebarOpen(!sidebarOpen)} style={{ width:48, height:48, background:'none', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:sidebarOpen?C.goldLight:C.gold }}>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            {sidebarOpen?<><path d="M15 5L5 15"/><path d="M5 5l10 10"/></>:<><line x1="2" y1="5" x2="18" y2="5"/><line x1="2" y1="10" x2="18" y2="10"/><line x1="2" y1="15" x2="18" y2="15"/></>}
           </svg>
         </button>
-        {sidebarOpen && (
-          <nav style={{ padding: '16px 0', overflowY: 'auto' }}>
-            {sections.map(id => (
-              <button key={id} onClick={() => scrollTo(id)} style={{
-                display: 'block', width: '100%', padding: '10px 24px',
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: C.goldLight, fontFamily: "'Noto Sans JP'", fontSize: 12,
-                textAlign: 'left', letterSpacing: '0.05em', whiteSpace: 'nowrap',
-                transition: 'color 0.2s',
-              }}
-                onMouseEnter={e => e.target.style.color = '#fff'}
-                onMouseLeave={e => e.target.style.color = C.goldLight}
-              >
-                {sectionLabels[id]}
-              </button>
-            ))}
-          </nav>
-        )}
+        {sidebarOpen && <nav style={{ padding:'16px 0', overflowY:'auto' }}>
+          {sections.map(id => <button key={id} onClick={()=>{sectionRefs.current[id]?.scrollIntoView({behavior:'smooth',block:'start'});setSidebarOpen(false)}} style={{ display:'block', width:'100%', padding:'10px 24px', background:'none', border:'none', cursor:'pointer', color:C.goldLight, fontSize:12, textAlign:'left', letterSpacing:'0.05em', whiteSpace:'nowrap' }}>{labels[id]}</button>)}
+        </nav>}
       </div>
 
-      {/* ── HERO ─────────────────────────────────────── */}
-      <section id="intro" ref={el => sectionRefs.current['intro'] = el}
-        style={{
-          minHeight: '100vh', display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', position: 'relative',
-          overflow: 'hidden', padding: '80px 60px 60px',
-          background: C.charcoal,
-        }}>
-        {/* Decorative lines */}
-        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-          <div style={{ position: 'absolute', top: '10%', left: '5%', width: 1, height: '80%', background: `linear-gradient(180deg, transparent, ${C.gold}40, transparent)` }} />
-          <div style={{ position: 'absolute', top: '10%', right: '5%', width: 1, height: '80%', background: `linear-gradient(180deg, transparent, ${C.gold}40, transparent)` }} />
-          <div style={{ position: 'absolute', top: '15%', left: '10%', right: '10%', height: 1, background: `linear-gradient(90deg, transparent, ${C.gold}30, transparent)` }} />
-          <div style={{ position: 'absolute', bottom: '15%', left: '10%', right: '10%', height: 1, background: `linear-gradient(90deg, transparent, ${C.gold}30, transparent)` }} />
-          {/* Large background text */}
-          <div style={{
-            position: 'absolute', bottom: '-2%', left: '50%', transform: 'translateX(-50%)',
-            fontFamily: "'Cormorant Garamond'", fontSize: 'clamp(100px, 20vw, 280px)',
-            color: 'rgba(184,146,74,0.05)', fontWeight: 300, letterSpacing: '-0.02em',
-            whiteSpace: 'nowrap', userSelect: 'none',
-          }}>ATELIER</div>
-        </div>
-
-        <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', maxWidth: 720 }}>
-          <div style={{
-            fontFamily: "'Cormorant Garamond'", fontSize: 'clamp(11px, 1.5vw, 14px)',
-            color: C.gold, letterSpacing: '0.35em', textTransform: 'uppercase',
-            marginBottom: 32,
-          }}>
-            Partnership Proposal
-          </div>
-          <h1 style={{
-            fontFamily: "'Cormorant Garamond'", fontWeight: 300,
-            fontSize: 'clamp(42px, 7vw, 88px)', lineHeight: 1.1,
-            color: C.ivory, marginBottom: 20, letterSpacing: '-0.01em',
-          }}>
-            提携のご提案
-          </h1>
-          <div style={{
-            width: 60, height: 1, background: C.gold, margin: '0 auto 32px',
-          }} />
-          <p style={{
-            fontFamily: "'Noto Serif JP'", fontSize: 'clamp(14px, 1.8vw, 17px)',
-            color: '#c8bfb0', lineHeight: 1.9, fontWeight: 300, marginBottom: 48,
-          }}>
-            オーダースーツ店様向けの協業案
-          </p>
-          <div style={{
-            display: 'inline-block', padding: '14px 40px',
-            border: `1px solid ${C.gold}60`, color: C.goldLight,
-            fontFamily: "'Noto Sans JP'", fontSize: 12, letterSpacing: '0.2em',
-          }}>
-            株式会社 aim-rose（エイムローズ）
-          </div>
+      {/* ── HERO ─────────────────────────────── */}
+      <section ref={el=>sectionRefs.current['intro']=el} style={{ minHeight:'100vh', position:'relative', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', overflow:'hidden', background:C.charcoal, padding:'80px 60px 60px' }}>
+        <HeroScene />
+        <div style={{ position:'absolute', inset:0, background:'linear-gradient(180deg, rgba(26,22,18,0.25) 0%, rgba(26,22,18,0.08) 50%, rgba(26,22,18,0.55) 100%)' }} />
+        <div style={{ position:'relative', zIndex:1, textAlign:'center', maxWidth:720 }}>
+          <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:12, color:C.gold, letterSpacing:'0.42em', textTransform:'uppercase', marginBottom:28 }}>Partnership Proposal</div>
+          <h1 style={{ fontFamily:"'Cormorant Garamond'", fontWeight:300, fontSize:'clamp(50px,9vw,100px)', lineHeight:1.05, color:C.ivory, marginBottom:18, letterSpacing:'-0.01em' }}>提携のご提案</h1>
+          <div style={{ width:60, height:1, background:C.gold, margin:'0 auto 24px' }} />
+          <p style={{ fontFamily:"'Noto Serif JP'", fontSize:'clamp(15px,2vw,19px)', color:'#c8bfb0', lineHeight:1.9, fontWeight:300, marginBottom:44 }}>オーダースーツ店様向けの協業案</p>
+          <div style={{ display:'inline-block', padding:'14px 44px', border:`1px solid ${C.gold}60`, color:C.goldLight, fontFamily:"'Noto Sans JP'", fontSize:12, letterSpacing:'0.2em' }}>株式会社 aim-rose（エイムローズ）</div>
         </div>
       </section>
 
-      {/* ── BACKGROUND ─────────────────────────────── */}
-      <section id="background" ref={el => sectionRefs.current['background'] = el}
-        className="fade-section"
-        style={{
-          minHeight: '100vh', display: 'flex', alignItems: 'center',
-          padding: '100px 80px', background: C.warmWhite,
-          opacity: 0, transform: 'translateY(40px)', transition: 'opacity 0.8s ease, transform 0.8s ease',
-        }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
-          <SectionLabel en="Background" ja="提携の背景" light />
-          <h2 style={headingStyle(C.charcoal)}>三方よし</h2>
-          <div style={{ width: 40, height: 2, background: C.gold, marginBottom: 64 }} />
+      {/* ── BACKGROUND ─────────────────────────── */}
+      <section ref={el=>sectionRefs.current['background']=el} className="fi" style={{ ...fi, minHeight:'100vh', display:'grid', gridTemplateColumns:'1fr 1fr', overflow:'hidden', background:C.warmWhite }}>
+        <div style={{ position:'relative', minHeight:520, background:C.charcoal }}>
+          <div style={{ position:'absolute', inset:0 }}><TriangleScene /></div>
+          <div style={{ position:'absolute', bottom:44, left:0, right:0, textAlign:'center' }}>
+            <span style={{ fontFamily:"'Cormorant Garamond'", fontSize:34, color:C.gold, fontStyle:'italic' }}>三方よし</span>
+          </div>
+        </div>
+        <div style={{ padding:'80px 56px', display:'flex', flexDirection:'column', justifyContent:'center' }}>
+          <SLabel en="Background" />
+          <h2 style={hS(C.charcoal)}>Win-Win-Win の<br />提携モデル</h2>
+          <div style={{ width:40, height:2, background:C.gold, marginBottom:40 }} />
+          {[{icon:'🏪',title:'御社のメリット',desc:'フルオーダー対応で受注機会が広がり、機会損失が減ります。'},{icon:'👤',title:'お客様のメリット',desc:'より幅広い選択肢と高品質な製品で満足度がアップします。'},{icon:'🌹',title:'弊社のメリット',desc:'長年培ってきた技術と経験を最大限に活用できます。'}].map((item,i)=>(
+            <div key={i} style={{ display:'flex', gap:18, marginBottom:24, padding:'18px 22px', background:i%2===0?C.cream:C.warmWhite, borderLeft:`2px solid ${C.gold}` }}>
+              <span style={{ fontSize:20, flexShrink:0 }}>{item.icon}</span>
+              <div>
+                <p style={{ fontFamily:"'Noto Serif JP'", fontSize:14, fontWeight:500, color:C.charcoal, marginBottom:5 }}>{item.title}</p>
+                <p style={{ fontSize:13, color:C.muted, lineHeight:1.7 }}>{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
-          {/* Triangle visual */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 32 }}>
+      {/* ── STRENGTH ──────────────────────────── */}
+      <section ref={el=>sectionRefs.current['strength']=el} className="fi" style={{ ...fi, minHeight:'100vh', position:'relative', overflow:'hidden', background:C.charcoal }}>
+        <div style={{ position:'absolute', inset:0 }}><SpoolScene /></div>
+        <div style={{ position:'absolute', inset:0, background:'linear-gradient(180deg,rgba(13,12,10,0.88) 0%,rgba(13,12,10,0.55) 40%,rgba(13,12,10,0.88) 100%)' }} />
+        <div style={{ position:'relative', zIndex:1, maxWidth:1100, margin:'0 auto', padding:'100px 80px' }}>
+          <SLabel en="Our Strengths" />
+          <h2 style={hS(C.ivory)}>職人の技術と20年の実績</h2>
+          <div style={{ width:40, height:2, background:C.gold, marginBottom:60 }} />
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:2 }}>
             {[
-              { party: '御社のメリット', desc: 'フルオーダー対応で受注機会が広がり、より多くのお客様のニーズに応えられるようになります。機会損失が減ります。', icon: '🏪' },
-              { party: 'お客様のメリット', desc: '満足度がアップします。より幅広い選択肢と高品質な製品を提供することで、お客様の期待に応えます。', icon: '👤' },
-              { party: '弊社のメリット', desc: '長年培ってきた技術と経験を最大限に活用できます。強みを活かした事業展開が可能になります。', icon: '🌹' },
-            ].map((item, i) => (
-              <div key={i} style={{
-                padding: '40px 32px', background: C.cream,
-                borderTop: `3px solid ${C.gold}`,
-                transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-              }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-6px)'; e.currentTarget.style.boxShadow = `0 20px 40px ${C.gold}20` }}
-                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}
-              >
-                <div style={{ fontSize: 32, marginBottom: 16 }}>{item.icon}</div>
-                <h3 style={{ fontFamily: "'Noto Serif JP'", fontSize: 17, fontWeight: 500, color: C.charcoal, marginBottom: 16, letterSpacing: '0.05em' }}>{item.party}</h3>
-                <p style={{ fontSize: 14, lineHeight: 1.8, color: C.slate }}>{item.desc}</p>
+              { num:'01', title:'職人の技術', body:'ジバンシー、コムデギャルソンなどのハイブランドを担う縫製工場で修得した技術を持っています。20年以上の実績で多ジャンル、フルアイテムの製作をしてきました。' },
+              { num:'02', title:'総合的な製作能力', body:'デザイン、パターン、企画、縫製全てを経験し、フルオーダー製作を進めるノウハウを持っています。' },
+              { num:'03', title:'過去の実績', body:'小澤征爾指揮による演劇衣装製作・森英恵デザイナーのサンプル製作・東京/関西コレクション衣装製作・宝塚歌劇団番組での製作指導など幅広い分野での実績。' },
+            ].map((item,i)=>(
+              <div key={i} style={{ padding:'44px 32px', background:'rgba(24,22,20,0.88)', backdropFilter:'blur(4px)', borderTop:`2px solid ${C.gold}` }}>
+                <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:62, fontWeight:300, color:`${C.gold}18`, lineHeight:1, marginBottom:20 }}>{item.num}</div>
+                <h3 style={{ fontFamily:"'Noto Serif JP'", fontSize:16, fontWeight:500, color:C.ivory, marginBottom:12 }}>{item.title}</h3>
+                <div style={{ width:22, height:1, background:C.gold, marginBottom:14 }} />
+                <p style={{ fontSize:13, lineHeight:1.9, color:'#8a8070' }}>{item.body}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── STRENGTH ───────────────────────────────── */}
-      <section id="strength" ref={el => sectionRefs.current['strength'] = el}
-        className="fade-section"
-        style={{
-          minHeight: '100vh', display: 'flex', alignItems: 'center',
-          padding: '100px 80px', background: C.charcoal,
-          opacity: 0, transform: 'translateY(40px)', transition: 'opacity 0.8s ease, transform 0.8s ease',
-        }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
-          <SectionLabel en="Our Strengths" ja="エイムローズの強み" />
-          <h2 style={headingStyle(C.ivory)}>職人の技術と20年の実績</h2>
-          <div style={{ width: 40, height: 2, background: C.gold, marginBottom: 64 }} />
+      {/* ── SERVICE ───────────────────────────── */}
+      <section ref={el=>sectionRefs.current['service']=el} className="fi" style={{ ...fi, minHeight:'80vh', position:'relative', overflow:'hidden', background:C.cream }}>
+        <div style={{ position:'absolute', right:0, top:0, bottom:0, width:'50%', opacity:0.55 }}><FabricScene /></div>
+        <div style={{ position:'relative', zIndex:1, maxWidth:660, padding:'100px 80px' }}>
+          <SLabel en="Services" />
+          <h2 style={hS(C.charcoal)}>2つの提携方法</h2>
+          <div style={{ width:40, height:2, background:C.gold, marginBottom:50 }} />
+          {[{method:'提携方法 01',title:'非対面式受注',sub:'フリーサイズデザインサンプルによる',tag:'簡単スタート'},{method:'提携方法 02',title:'対面式受注',sub:'フルオーダーによる出張対応',tag:'完全フルオーダー'}].map((item,i)=>(
+            <div key={i} style={{ padding:'32px 40px', background:'rgba(250,247,242,0.92)', borderLeft:`3px solid ${C.gold}`, marginBottom:22, backdropFilter:'blur(8px)' }}>
+              <span style={{ fontFamily:"'Cormorant Garamond'", fontSize:12, color:C.gold, letterSpacing:'0.2em' }}>{item.method}</span>
+              <h3 style={{ fontFamily:"'Noto Serif JP'", fontSize:21, fontWeight:500, color:C.charcoal, margin:'8px 0 6px' }}>{item.title}</h3>
+              <p style={{ fontSize:13, color:C.muted, marginBottom:12 }}>{item.sub}</p>
+              <span style={{ display:'inline-block', padding:'3px 14px', background:`${C.gold}15`, border:`1px solid ${C.gold}40`, color:C.goldDark, fontSize:11 }}>{item.tag}</span>
+            </div>
+          ))}
+        </div>
+      </section>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
-            {[
-              {
-                num: '01', title: '職人の技術',
-                body: 'ジバンシー、コムデギャルソンなどのハイブランドを担う縫製工場で修得した技術。20年以上の実績で多ジャンル、フルアイテムの製作をしてきました。',
-              },
-              {
-                num: '02', title: '総合的な製作能力',
-                body: 'デザイン、パターン、企画、縫製全てを経験し、フルオーダー製作を進めるノウハウを持っています。',
-              },
-              {
-                num: '03', title: '過去の実績',
-                body: '小澤征爾指揮による演劇衣装製作・森英恵デザイナーのサンプル製作・東京／関西コレクション衣装・宝塚歌劇団番組での製作指導など幅広い分野での実績。',
-              },
-            ].map((item, i) => (
-              <div key={i} style={{
-                padding: '48px 36px', background: i === 1 ? '#22201a' : '#181614',
-                borderBottom: `1px solid ${C.gold}30`,
-              }}>
-                <div style={{
-                  fontFamily: "'Cormorant Garamond'", fontSize: 64, fontWeight: 300,
-                  color: `${C.gold}25`, lineHeight: 1, marginBottom: 24,
-                }}>
-                  {item.num}
-                </div>
-                <h3 style={{
-                  fontFamily: "'Noto Serif JP'", fontSize: 18, fontWeight: 500,
-                  color: C.ivory, marginBottom: 20, letterSpacing: '0.06em',
-                }}>
-                  {item.title}
-                </h3>
-                <div style={{ width: 28, height: 1, background: C.gold, marginBottom: 20 }} />
-                <p style={{ fontSize: 13, lineHeight: 1.9, color: '#9a9080' }}>{item.body}</p>
+      {/* ── METHOD 1 ──────────────────────────── */}
+      <section ref={el=>sectionRefs.current['method1']=el} className="fi" style={{ ...fi, minHeight:'100vh', display:'grid', gridTemplateColumns:'1fr 1fr', overflow:'hidden', background:C.warmWhite }}>
+        <div style={{ position:'relative', minHeight:480 }}><FabricScene /></div>
+        <div style={{ padding:'80px 56px', display:'flex', flexDirection:'column', justifyContent:'center' }}>
+          <SLabel en="Method 01" />
+          <h2 style={hS(C.charcoal)}>非対面式受注</h2>
+          <p style={{ fontSize:13, color:C.muted, marginBottom:36 }}>フリーサイズデザインサンプルによる</p>
+          <FlowChart steps={[{n:1,title:'サンプル展示',desc:'S〜L対応サンプルを店内またはHP上に展示'},{n:2,title:'受注（丈調整）',desc:'丈だけの簡単な調整で受注'},{n:3,title:'資材発注',desc:'受注内容に基づいて資材を発注'},{n:4,title:'エイムローズで製作',desc:'熟練職人が丁寧に製作'},{n:5,title:'納品',desc:'材料が揃ってから1ヶ月半〜2ヶ月'}]} />
+          <div style={{ marginTop:32, display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+            {[['コート','¥100,000'],['スーツ','¥100,000'],['ジャケット','¥70,000'],['ブラウス','¥50,000']].map(([n,p],i)=>(
+              <div key={i} style={{ padding:'14px 18px', background:C.cream, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span style={{ fontSize:13, color:C.charcoal }}>{n}</span>
+                <span style={{ fontFamily:"'Cormorant Garamond'", fontSize:16, color:C.gold }}>{p}</span>
               </div>
             ))}
           </div>
+          <p style={{ marginTop:12, fontSize:11, color:C.muted }}>※税別 ／ 全てS〜L対応 ／ 生地はご準備ください</p>
         </div>
       </section>
 
-      {/* ── SERVICE ─────────────────────────────────── */}
-      <section id="service" ref={el => sectionRefs.current['service'] = el}
-        className="fade-section"
-        style={{
-          minHeight: '80vh', display: 'flex', alignItems: 'center',
-          padding: '100px 80px', background: C.cream,
-          opacity: 0, transform: 'translateY(40px)', transition: 'opacity 0.8s ease, transform 0.8s ease',
-        }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
-          <SectionLabel en="Services" ja="サービス内容" light />
-          <h2 style={headingStyle(C.charcoal)}>2つの提携方法</h2>
-          <div style={{ width: 40, height: 2, background: C.gold, marginBottom: 64 }} />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40 }}>
-            {[
-              { method: '提携方法 01', title: '非対面式受注', sub: 'フリーサイズデザインサンプルによる', tag: '簡単スタート' },
-              { method: '提携方法 02', title: '対面式受注', sub: 'フルオーダーによる出張対応', tag: '完全フルオーダー' },
-            ].map((item, i) => (
-              <div key={i} style={{
-                padding: '48px 40px', background: C.warmWhite,
-                borderLeft: `3px solid ${C.gold}`,
-                display: 'flex', flexDirection: 'column', gap: 12,
-              }}>
-                <span style={{ fontFamily: "'Cormorant Garamond'", fontSize: 13, color: C.gold, letterSpacing: '0.2em' }}>{item.method}</span>
-                <h3 style={{ fontFamily: "'Noto Serif JP'", fontSize: 24, fontWeight: 500, color: C.charcoal }}>{item.title}</h3>
-                <p style={{ fontSize: 13, color: C.muted }}>{item.sub}</p>
-                <span style={{
-                  display: 'inline-block', padding: '4px 16px', background: `${C.gold}15`,
-                  border: `1px solid ${C.gold}40`, color: C.goldDark, fontSize: 12, letterSpacing: '0.05em',
-                  alignSelf: 'flex-start', marginTop: 8,
-                }}>{item.tag}</span>
+      {/* ── METHOD 2 ──────────────────────────── */}
+      <section ref={el=>sectionRefs.current['method2']=el} className="fi" style={{ ...fi, minHeight:'100vh', position:'relative', overflow:'hidden', background:C.charcoal }}>
+        <div style={{ position:'absolute', inset:0 }}><FabricScene dark /></div>
+        <div style={{ position:'absolute', inset:0, background:'rgba(13,12,10,0.78)' }} />
+        <div style={{ position:'relative', zIndex:1, maxWidth:1100, margin:'0 auto', padding:'100px 80px' }}>
+          <SLabel en="Method 02" />
+          <h2 style={hS(C.ivory)}>フルオーダー対面式受注</h2>
+          <div style={{ width:40, height:2, background:C.gold, marginBottom:60 }} />
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:60 }}>
+            <FlowChart dark steps={[{n:1,title:'お客様からの依頼',desc:'フルオーダーの依頼を受けます'},{n:2,title:'エイムローズに出張依頼',desc:'オーダー日を決定'},{n:3,title:'オーダー当日',desc:'御社に訪問し、共同で受注'},{n:4,title:'仮縫い 1〜2回',desc:'お客様の体型に合わせて調整'},{n:5,title:'エイムローズで製作',desc:'納期は2〜3ヶ月'},{n:6,title:'納品',desc:'完成した高品質なフルオーダー製品をお届け'}]} />
+            <div style={{ display:'flex', flexDirection:'column', justifyContent:'center', gap:18 }}>
+              <div style={{ padding:'28px 32px', background:'rgba(24,22,20,0.9)', borderLeft:`3px solid ${C.gold}` }}>
+                <p style={{ fontSize:11, color:C.gold, letterSpacing:'0.1em', marginBottom:14 }}>出張費（受注日・仮縫い日含む）</p>
+                {[['近距離（20km以内）','¥10,000 + 交通費'],['中距離（〜50km）','¥20,000 + 交通費'],['長距離（50km以上）','¥40,000 + 交通費']].map(([d,p],i)=>(
+                  <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'9px 0', borderBottom:`1px solid ${C.border}`, fontSize:13 }}>
+                    <span style={{ color:'#9a9080' }}>{d}</span><span style={{ color:C.goldLight }}>{p}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <p style={{ marginTop: 40, fontSize: 14, color: C.muted, textAlign: 'center', lineHeight: 2 }}>
-            メンズ・レディース問わず対応 ／ 一点物〜複数着まで柔軟に対応
-          </p>
-        </div>
-      </section>
-
-      {/* ── METHOD 1 ────────────────────────────────── */}
-      <section id="method1" ref={el => sectionRefs.current['method1'] = el}
-        className="fade-section"
-        style={{
-          minHeight: '100vh', display: 'flex', alignItems: 'center',
-          padding: '100px 80px', background: C.warmWhite,
-          opacity: 0, transform: 'translateY(40px)', transition: 'opacity 0.8s ease, transform 0.8s ease',
-        }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
-          <SectionLabel en="Method 01" ja="提携方法1" light />
-          <h2 style={headingStyle(C.charcoal)}>非対面式受注</h2>
-          <p style={{ fontSize: 14, color: C.muted, marginBottom: 16 }}>フリーサイズデザインサンプルによる</p>
-          <div style={{ width: 40, height: 2, background: C.gold, marginBottom: 64 }} />
-          <FlowChart steps={[
-            { n: 1, title: 'サンプル展示', desc: 'S〜Lにフィットするフリーサイズサンプルを店内またはHP上に展示' },
-            { n: 2, title: '受注（丈調整）', desc: 'お客様の体型に合わせて丈だけの簡単な調整で受注' },
-            { n: 3, title: '資材発注', desc: '受注内容に基づいて必要な資材を発注' },
-            { n: 4, title: 'エイムローズで製作', desc: '熟練職人が丁寧に製作' },
-            { n: 5, title: '納品', desc: '納期は材料が揃ってから1ヶ月半〜2ヶ月' },
-          ]} />
-          <div style={{ marginTop: 60, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
-            {[
-              { name: 'コート', sample: '¥50,000', normal: '¥100,000' },
-              { name: 'スーツ', sample: '¥50,000', normal: '¥100,000' },
-              { name: 'ジャケット', sample: '¥35,000', normal: '¥70,000' },
-              { name: 'ブラウス', sample: '¥25,000', normal: '¥50,000' },
-            ].map((item, i) => (
-              <div key={i} style={{ padding: '24px', background: C.cream, textAlign: 'center' }}>
-                <p style={{ fontSize: 15, fontFamily: "'Noto Serif JP'", fontWeight: 500, color: C.charcoal, marginBottom: 12 }}>{item.name}</p>
-                <p style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>サンプル特別価格</p>
-                <p style={{ fontSize: 18, color: C.gold, fontFamily: "'Cormorant Garamond'", fontWeight: 500 }}>{item.sample}</p>
-                <p style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>通常 {item.normal}</p>
+              <div style={{ padding:'22px 28px', background:`${C.gold}10`, border:`1px solid ${C.gold}30` }}>
+                <p style={{ fontSize:13, color:C.textLight, lineHeight:2.2 }}>✦ 販売価格は御社で自由設定<br />✦ 材料はご準備ください<br />✦ ご紹介リピート時に<strong style={{ color:C.goldLight }}>20% キャッシュバック</strong></p>
               </div>
-            ))}
-          </div>
-          <p style={{ marginTop: 24, fontSize: 12, color: C.muted, textAlign: 'center' }}>※税別 ／ 全てS〜L対応 ／ 生地はご準備ください ／ 丈調整 +¥1,000/箇所</p>
-        </div>
-      </section>
-
-      {/* ── METHOD 2 ────────────────────────────────── */}
-      <section id="method2" ref={el => sectionRefs.current['method2'] = el}
-        className="fade-section"
-        style={{
-          minHeight: '100vh', display: 'flex', alignItems: 'center',
-          padding: '100px 80px', background: C.charcoal,
-          opacity: 0, transform: 'translateY(40px)', transition: 'opacity 0.8s ease, transform 0.8s ease',
-        }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
-          <SectionLabel en="Method 02" ja="提携方法2" />
-          <h2 style={headingStyle(C.ivory)}>フルオーダー対面式受注</h2>
-          <div style={{ width: 40, height: 2, background: C.gold, marginBottom: 64 }} />
-          <FlowChart dark steps={[
-            { n: 1, title: 'お客様からの依頼', desc: 'フルオーダーの依頼を受けます' },
-            { n: 2, title: 'エイムローズに出張依頼', desc: 'オーダー日を決定' },
-            { n: 3, title: 'オーダー当日', desc: '御社に訪問し、共同で受注' },
-            { n: 4, title: '仮縫い 1〜2回', desc: 'お客様の体型に合わせて細かな調整' },
-            { n: 5, title: 'エイムローズで製作', desc: '納期は2〜3ヶ月（仮縫いのタイミングにより前後）' },
-            { n: 6, title: '納品', desc: '完成した高品質なフルオーダー製品をお届け' },
-          ]} />
-          <div style={{ marginTop: 60, padding: '32px 40px', background: '#181614', borderLeft: `3px solid ${C.gold}` }}>
-            <p style={{ color: C.textLight, fontSize: 13, lineHeight: 2 }}>
-              <strong style={{ color: C.goldLight }}>出張費：</strong>
-              近距離（20km以内）¥10,000 + 交通費 ／
-              中距離（〜50km）¥20,000 + 交通費 ／
-              長距離（50km以上）¥40,000 + 交通費
-              ＊受注日・仮縫い日の計2〜3回分含む
-            </p>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ── PRICING ─────────────────────────────────── */}
-      <section id="pricing" ref={el => sectionRefs.current['pricing'] = el}
-        className="fade-section"
-        style={{
-          minHeight: '80vh', display: 'flex', alignItems: 'center',
-          padding: '100px 80px', background: C.cream,
-          opacity: 0, transform: 'translateY(40px)', transition: 'opacity 0.8s ease, transform 0.8s ease',
-        }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
-          <SectionLabel en="Pricing" ja="料金表" light />
-          <h2 style={headingStyle(C.charcoal)}>フルオーダー料金</h2>
-          <div style={{ width: 40, height: 2, background: C.gold, marginBottom: 64 }} />
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, background: C.warmWhite }}>
-            <thead>
-              <tr style={{ background: C.charcoal, color: C.ivory }}>
-                <th style={thStyle}>アイテム</th>
-                <th style={thStyle}>パターン価格（税別）</th>
-                <th style={thStyle}>製作価格（税別）</th>
-              </tr>
-            </thead>
+      {/* ── PRICING ───────────────────────────── */}
+      <section ref={el=>sectionRefs.current['pricing']=el} className="fi" style={{ ...fi, minHeight:'80vh', position:'relative', overflow:'hidden', background:C.warmWhite }}>
+        <div style={{ position:'absolute', right:0, top:0, bottom:0, width:'50%', opacity:0.5 }}><GemScene /></div>
+        <div style={{ position:'relative', zIndex:1, maxWidth:680, padding:'100px 80px' }}>
+          <SLabel en="Pricing" />
+          <h2 style={hS(C.charcoal)}>フルオーダー料金</h2>
+          <div style={{ width:40, height:2, background:C.gold, marginBottom:48 }} />
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, background:'rgba(250,247,242,0.95)' }}>
+            <thead><tr style={{ background:C.charcoal, color:C.ivory }}><th style={thS}>アイテム</th><th style={thS}>パターン</th><th style={thS}>製作</th></tr></thead>
             <tbody>
-              {[
-                ['コート', '¥55,000〜', '¥90,000〜'],
-                ['ジャケット・ブルゾン', '¥50,000〜', '¥70,000〜'],
-                ['ワンピース', '¥45,000〜', '¥60,000〜'],
-                ['パンツ・スカート', '¥35,000〜', '¥30,000〜'],
-                ['シャツ', '¥35,000〜', '¥35,000〜'],
-              ].map(([name, pat, make], i) => (
-                <tr key={i} style={{ borderBottom: `1px solid ${C.cream}` }}>
-                  <td style={tdStyle}>{name}</td>
-                  <td style={{ ...tdStyle, color: C.goldDark, fontFamily: "'Cormorant Garamond'", fontSize: 16 }}>{pat}</td>
-                  <td style={{ ...tdStyle, color: C.goldDark, fontFamily: "'Cormorant Garamond'", fontSize: 16 }}>{make}</td>
+              {[['コート','¥55,000〜','¥90,000〜'],['ジャケット・ブルゾン','¥50,000〜','¥70,000〜'],['ワンピース','¥45,000〜','¥60,000〜'],['パンツ・スカート','¥35,000〜','¥30,000〜'],['シャツ','¥35,000〜','¥35,000〜']].map(([n,p,m],i)=>(
+                <tr key={i} style={{ borderBottom:`1px solid ${C.cream}` }}>
+                  <td style={tdS}>{n}</td>
+                  <td style={{ ...tdS, color:C.goldDark, fontFamily:"'Cormorant Garamond'", fontSize:16 }}>{p}</td>
+                  <td style={{ ...tdS, color:C.goldDark, fontFamily:"'Cormorant Garamond'", fontSize:16 }}>{m}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <div style={{ marginTop: 32, padding: '24px 32px', background: `${C.gold}10`, border: `1px solid ${C.gold}30` }}>
-            <p style={{ fontSize: 13, color: C.charcoal, lineHeight: 2 }}>
-              ✦ 革の場合 別途 ¥20,000 ／ 柄合わせ 別途 ¥10,000<br />
-              ✦ 2着目以降、同じパターンはパターン代不要<br />
-              ✦ <strong>ご紹介リピート時 → 御社に20%キャッシュバック</strong>
-            </p>
+          <div style={{ marginTop:20, padding:'18px 24px', background:`${C.gold}10`, border:`1px solid ${C.gold}30` }}>
+            <p style={{ fontSize:12, color:C.charcoal, lineHeight:2.2 }}>✦ 革の場合 別途 ¥20,000 ／ 柄合わせ 別途 ¥10,000<br />✦ 2着目以降、同パターンはパターン代不要<br />✦ <strong>ご紹介リピート → 御社に20%キャッシュバック</strong></p>
           </div>
         </div>
       </section>
 
-      {/* ── WHOLESALE ───────────────────────────────── */}
-      <section id="wholesale" ref={el => sectionRefs.current['wholesale'] = el}
-        className="fade-section"
-        style={{
-          padding: '100px 80px', background: C.warmWhite,
-          opacity: 0, transform: 'translateY(40px)', transition: 'opacity 0.8s ease, transform 0.8s ease',
-        }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <SectionLabel en="Wholesale" ja="卸販売" light />
-          <h2 style={headingStyle(C.charcoal)}>アクセサリー卸</h2>
-          <div style={{ width: 40, height: 2, background: C.gold, marginBottom: 64 }} />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 32 }}>
-            {[
-              { name: 'ポケットチーフ', desc: '1柄：定価 ¥2,900 → 卸値 ¥1,450\n2柄：定価 ¥3,500 → 卸値 ¥1,750' },
-              { name: 'ミニネクタイ', desc: '定価 ¥3,900 → 卸値 ¥1,950' },
-              { name: 'ミニ蝶ネクタイ', desc: '定価 ¥3,900 → 卸値 ¥1,950' },
-            ].map((item, i) => (
-              <div key={i} style={{ padding: '36px', background: C.cream, borderTop: `2px solid ${C.gold}` }}>
-                <h3 style={{ fontFamily: "'Noto Serif JP'", fontSize: 18, color: C.charcoal, marginBottom: 20 }}>{item.name}</h3>
-                <pre style={{ fontSize: 13, color: C.slate, whiteSpace: 'pre-wrap', lineHeight: 2, fontFamily: 'inherit' }}>{item.desc}</pre>
+      {/* ── WHOLESALE ─────────────────────────── */}
+      <section ref={el=>sectionRefs.current['wholesale']=el} className="fi" style={{ ...fi, padding:'100px 80px', background:C.cream }}>
+        <div style={{ maxWidth:1100, margin:'0 auto' }}>
+          <SLabel en="Wholesale" />
+          <h2 style={hS(C.charcoal)}>アクセサリー卸</h2>
+          <div style={{ width:40, height:2, background:C.gold, marginBottom:48 }} />
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:24 }}>
+            {[{name:'ポケットチーフ',desc:'1柄タイプ\n定価 ¥2,900 → 卸値 ¥1,450\n\n2柄タイプ\n定価 ¥3,500 → 卸値 ¥1,750'},{name:'ミニネクタイ',desc:'定価 ¥3,900\n卸値半額 ¥1,950'},{name:'ミニ蝶ネクタイ',desc:'定価 ¥3,900\n卸値半額 ¥1,950'}].map((item,i)=>(
+              <div key={i} style={{ padding:'32px', background:C.warmWhite, borderTop:`2px solid ${C.gold}` }}>
+                <h3 style={{ fontFamily:"'Noto Serif JP'", fontSize:17, color:C.charcoal, marginBottom:18 }}>{item.name}</h3>
+                <pre style={{ fontSize:13, color:C.slate, whiteSpace:'pre-wrap', lineHeight:2.2, fontFamily:'inherit' }}>{item.desc}</pre>
               </div>
             ))}
           </div>
-          <p style={{ marginTop: 24, fontSize: 12, color: C.muted, textAlign: 'center' }}>
-            ※税別 ／ 最低発注 ¥10,000 ／ 送料別途 ／ aimrose.official.ec
-          </p>
+          <p style={{ marginTop:18, fontSize:11, color:C.muted, textAlign:'center' }}>※税別 ／ 最低発注 ¥10,000 ／ 送料別途 ／ aimrose.official.ec</p>
         </div>
       </section>
 
-      {/* ── STEPS ───────────────────────────────────── */}
-      <section id="steps" ref={el => sectionRefs.current['steps'] = el}
-        className="fade-section"
-        style={{
-          minHeight: '80vh', display: 'flex', alignItems: 'center',
-          padding: '100px 80px', background: C.charcoal,
-          opacity: 0, transform: 'translateY(40px)', transition: 'opacity 0.8s ease, transform 0.8s ease',
-        }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
-          <SectionLabel en="Getting Started" ja="提携開始までのステップ" />
-          <h2 style={headingStyle(C.ivory)}>今すぐ始められます</h2>
-          <div style={{ width: 40, height: 2, background: C.gold, marginBottom: 64 }} />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
-            {[
-              { n: '01', title: '提携方法1の場合', desc: 'サンプル製作を行い、その後、受注方法の指導をさせていただきます。' },
-              { n: '02', title: '提携方法2の場合', desc: '特別な準備は不要です。お客様からのフルオーダー依頼があった際に随時対応いたします。' },
-              { n: '03', title: '契約手続き', desc: '提携内容の詳細について協議し、双方の合意のもと契約を締結いたします。' },
-            ].map((item, i) => (
-              <div key={i} style={{ padding: '48px 36px', background: '#181614' }}>
-                <div style={{ fontFamily: "'Cormorant Garamond'", fontSize: 56, fontWeight: 300, color: `${C.gold}30`, lineHeight: 1, marginBottom: 20 }}>{item.n}</div>
-                <h3 style={{ fontFamily: "'Noto Serif JP'", fontSize: 17, color: C.ivory, marginBottom: 16 }}>{item.title}</h3>
-                <div style={{ width: 24, height: 1, background: C.gold, marginBottom: 16 }} />
-                <p style={{ fontSize: 13, color: '#8a8070', lineHeight: 1.9 }}>{item.desc}</p>
+      {/* ── STEPS ─────────────────────────────── */}
+      <section ref={el=>sectionRefs.current['steps']=el} className="fi" style={{ ...fi, minHeight:'70vh', display:'flex', alignItems:'center', padding:'100px 80px', background:C.charcoal }}>
+        <div style={{ maxWidth:1100, margin:'0 auto', width:'100%' }}>
+          <SLabel en="Getting Started" />
+          <h2 style={hS(C.ivory)}>今すぐ始められます</h2>
+          <div style={{ width:40, height:2, background:C.gold, marginBottom:56 }} />
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:2 }}>
+            {[{n:'01',title:'提携方法1の場合',desc:'サンプル製作を行い、その後、受注方法の指導をさせていただきます。'},{n:'02',title:'提携方法2の場合',desc:'特別な準備は不要です。お客様からのフルオーダー依頼があった際に随時対応いたします。'},{n:'03',title:'契約手続き',desc:'提携内容の詳細について協議し、双方の合意のもと契約を締結いたします。'}].map((item,i)=>(
+              <div key={i} style={{ padding:'44px 32px', background:'#181614' }}>
+                <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:58, fontWeight:300, color:`${C.gold}22`, lineHeight:1, marginBottom:18 }}>{item.n}</div>
+                <h3 style={{ fontFamily:"'Noto Serif JP'", fontSize:15, color:C.ivory, marginBottom:12 }}>{item.title}</h3>
+                <div style={{ width:22, height:1, background:C.gold, marginBottom:12 }} />
+                <p style={{ fontSize:13, color:'#8a8070', lineHeight:1.9 }}>{item.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── CONTACT ─────────────────────────────────── */}
-      <section id="contact" ref={el => sectionRefs.current['contact'] = el}
-        className="fade-section"
-        style={{
-          minHeight: '70vh', display: 'flex', alignItems: 'center',
-          padding: '100px 80px',
-          background: `linear-gradient(135deg, ${C.charcoal} 0%, #2a1f14 100%)`,
-          opacity: 0, transform: 'translateY(40px)', transition: 'opacity 0.8s ease, transform 0.8s ease',
-          position: 'relative', overflow: 'hidden',
-        }}>
-        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-          <div style={{ position: 'absolute', top: '20%', right: '-5%', width: 400, height: 400, borderRadius: '50%', background: `${C.gold}08` }} />
-        </div>
-        <div style={{ maxWidth: 800, margin: '0 auto', width: '100%', position: 'relative', zIndex: 1, textAlign: 'center' }}>
-          <SectionLabel en="Contact" ja="お問い合わせ" />
-          <h2 style={{ ...headingStyle(C.ivory), marginBottom: 48 }}>ご質問・ご相談はお気軽に</h2>
-          <div style={{ padding: '48px 60px', background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.gold}30` }}>
-            <p style={{ fontFamily: "'Cormorant Garamond'", fontSize: 22, color: C.goldLight, marginBottom: 8 }}>株式会社 aim-rose（エイムローズ）</p>
-            <div style={{ width: 40, height: 1, background: C.gold, margin: '0 auto 32px' }} />
-            {[
-              ['住所', '〒542-0081 大阪市中央区南船場2-2-28 ジェイ・プライド順慶ビル205'],
-              ['TEL', '06-6261-7373'],
-              ['FAX', '06-6261-7372'],
-              ['HP', 'https://aim-rose-order.com/'],
-            ].map(([label, val]) => (
-              <div key={label} style={{ display: 'flex', justifyContent: 'center', gap: 32, marginBottom: 12, fontSize: 13 }}>
-                <span style={{ color: C.gold, minWidth: 40, textAlign: 'right' }}>{label}</span>
-                <span style={{ color: '#c8bfb0' }}>{val}</span>
+      {/* ── CONTACT ───────────────────────────── */}
+      <section ref={el=>sectionRefs.current['contact']=el} className="fi" style={{ ...fi, minHeight:'80vh', position:'relative', overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center', background:C.charcoal }}>
+        <div style={{ position:'absolute', inset:0 }}><RoseScene /></div>
+        <div style={{ position:'absolute', inset:0, background:'radial-gradient(ellipse at center, rgba(13,12,10,0.25) 0%, rgba(13,12,10,0.88) 65%)' }} />
+        <div style={{ position:'relative', zIndex:1, textAlign:'center', maxWidth:680, padding:'80px 40px' }}>
+          <SLabel en="Contact" />
+          <h2 style={{ ...hS(C.ivory), marginBottom:44 }}>ご質問・ご相談はお気軽に</h2>
+          <div style={{ padding:'44px 56px', background:'rgba(255,255,255,0.05)', border:`1px solid ${C.gold}30`, backdropFilter:'blur(10px)' }}>
+            <p style={{ fontFamily:"'Cormorant Garamond'", fontSize:22, color:C.goldLight, marginBottom:6 }}>株式会社 aim-rose（エイムローズ）</p>
+            <div style={{ width:40, height:1, background:C.gold, margin:'0 auto 28px' }} />
+            {[['住所','〒542-0081 大阪市中央区南船場2-2-28'],['','ジェイ・プライド順慶ビル205'],['TEL','06-6261-7373'],['FAX','06-6261-7372'],['HP','https://aim-rose-order.com/']].map(([l,v],i)=>(
+              <div key={i} style={{ display:'flex', justifyContent:'center', gap:28, marginBottom:9, fontSize:13 }}>
+                <span style={{ color:C.gold, minWidth:40, textAlign:'right' }}>{l}</span>
+                <span style={{ color:'#c8bfb0' }}>{v}</span>
               </div>
             ))}
           </div>
-          <p style={{ marginTop: 32, fontSize: 13, color: C.textDim }}>提携店様専用公式ラインもございます</p>
+          <p style={{ marginTop:24, fontSize:13, color:C.textDim }}>提携店様専用公式ラインもございます</p>
         </div>
       </section>
-
     </div>
   )
 }
 
-// ─── PRESENTER VIEW ─────────────────────────────────────────────────────────
+// ═══════════════════════════════════════
+// PRESENTER VIEW
+// ═══════════════════════════════════════
 function PresenterView() {
   const [current, setCurrent] = useState(0)
   const [bantChecked, setBantChecked] = useState({})
-  const [openObjection, setOpenObjection] = useState(null)
+  const [openObj, setOpenObj] = useState(null)
   const sendSync = useSyncSend()
+  const sec = P_SECTIONS[current]
 
   useEffect(() => {
-    const sec = P_SECTIONS[current]
-    if (sec.customerSection && CUSTOMER_MAP[sec.customerSection]) {
-      sendSync(CUSTOMER_MAP[sec.customerSection])
-    }
+    if (sec.customerSection && CUSTOMER_MAP[sec.customerSection]) sendSync(CUSTOMER_MAP[sec.customerSection])
   }, [current])
 
   useEffect(() => {
-    const handler = (e) => {
-      if (e.key === 'ArrowRight') setCurrent(c => Math.min(c + 1, P_SECTIONS.length - 1))
-      if (e.key === 'ArrowLeft') setCurrent(c => Math.max(c - 1, 0))
+    const h = e => {
+      if(e.key==='ArrowRight') setCurrent(c=>Math.min(c+1,P_SECTIONS.length-1))
+      if(e.key==='ArrowLeft') setCurrent(c=>Math.max(c-1,0))
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    window.addEventListener('keydown',h); return ()=>window.removeEventListener('keydown',h)
   }, [])
 
-  const sec = P_SECTIONS[current]
-  const progress = (current / (P_SECTIONS.length - 1)) * 100
-
-  const toggleBant = (id) => setBantChecked(prev => ({ ...prev, [id]: !prev[id] }))
+  const progress = (current/(P_SECTIONS.length-1))*100
 
   return (
-    <div style={{
-      background: C.bg, color: C.textLight, fontFamily: "'Noto Sans JP', sans-serif",
-      minHeight: '100vh', display: 'flex', flexDirection: 'column',
-    }}>
-      {/* Top Bar */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '12px 24px', background: C.surface, borderBottom: `1px solid ${C.border}`,
-        flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{
-            padding: '4px 12px', background: `${C.gold}20`, border: `1px solid ${C.gold}50`,
-            color: C.goldLight, fontSize: 11, letterSpacing: '0.1em', fontFamily: "'DM Mono'",
-          }}>PRESENTER MODE</span>
-          <span style={{ color: C.textDim, fontSize: 12, fontFamily: "'Cormorant Garamond'" }}>aim-rose 提携プレゼン</span>
+    <div style={{ background:C.bg, color:C.textLight, fontFamily:"'Noto Sans JP', sans-serif", minHeight:'100vh', display:'flex', flexDirection:'column' }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 24px', background:C.surface, borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+          <span style={{ padding:'4px 12px', background:`${C.gold}20`, border:`1px solid ${C.gold}50`, color:C.goldLight, fontSize:11, letterSpacing:'0.1em', fontFamily:"'DM Mono'" }}>PRESENTER MODE</span>
+          <span style={{ color:C.textDim, fontSize:12, fontFamily:"'Cormorant Garamond'" }}>aim-rose 提携プレゼン</span>
         </div>
-        <a href="/" target="_blank" rel="noopener noreferrer" style={{
-          padding: '6px 16px', background: 'none', border: `1px solid ${C.border}`,
-          color: C.textMid, fontSize: 11, letterSpacing: '0.08em', cursor: 'pointer',
-          textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8,
-          transition: 'border-color 0.2s, color 0.2s',
-        }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = C.gold; e.currentTarget.style.color = C.goldLight }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textMid }}
-        >
-          ↗ 顧客画面を開く
-        </a>
+        <a href="/" target="_blank" rel="noopener noreferrer" style={{ padding:'6px 16px', background:'none', border:`1px solid ${C.border}`, color:C.textMid, fontSize:11, letterSpacing:'0.08em', cursor:'pointer', textDecoration:'none' }}>↗ 顧客画面を開く</a>
       </div>
-
-      {/* Progress Bar */}
-      <div style={{ height: 2, background: C.border, flexShrink: 0 }}>
-        <div style={{
-          height: '100%', width: `${progress}%`,
-          background: `linear-gradient(90deg, ${C.goldDark}, ${C.goldLight})`,
-          transition: 'width 0.4s ease',
-        }} />
+      <div style={{ height:2, background:C.border, flexShrink:0 }}>
+        <div style={{ height:'100%', width:`${progress}%`, background:`linear-gradient(90deg,${C.goldDark},${C.goldLight})`, transition:'width 0.4s ease' }} />
       </div>
-
-      {/* Tab Navigation */}
-      <div style={{
-        display: 'flex', overflow: 'auto', background: C.surface,
-        borderBottom: `1px solid ${C.border}`, flexShrink: 0,
-        scrollbarWidth: 'none',
-      }}>
-        {P_SECTIONS.map((s, i) => (
-          <button key={s.id} onClick={() => setCurrent(i)} style={{
-            padding: '10px 18px', background: 'none', border: 'none',
-            borderBottom: i === current ? `2px solid ${C.gold}` : '2px solid transparent',
-            color: i === current ? C.goldLight : C.textDim, cursor: 'pointer',
-            fontSize: 11, letterSpacing: '0.05em', whiteSpace: 'nowrap',
-            transition: 'color 0.2s',
-          }}>
-            {s.label}
-          </button>
-        ))}
+      <div style={{ display:'flex', overflow:'auto', background:C.surface, borderBottom:`1px solid ${C.border}`, flexShrink:0, scrollbarWidth:'none' }}>
+        {P_SECTIONS.map((s,i)=><button key={s.id} onClick={()=>setCurrent(i)} style={{ padding:'10px 18px', background:'none', border:'none', borderBottom:i===current?`2px solid ${C.gold}`:'2px solid transparent', color:i===current?C.goldLight:C.textDim, cursor:'pointer', fontSize:11, letterSpacing:'0.05em', whiteSpace:'nowrap', transition:'color 0.2s' }}>{s.label}</button>)}
       </div>
-
-      {/* Main Content */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '32px 40px' }}>
-        {/* Sync indicator */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-          <span style={{
-            padding: '3px 10px', fontSize: 11, fontFamily: "'DM Mono'",
-            background: sec.customerSection ? `${C.gold}15` : '#1a2a1a',
-            border: `1px solid ${sec.customerSection ? C.gold + '40' : '#2a4a2a'}`,
-            color: sec.customerSection ? C.gold : '#4a8a4a',
-          }}>
-            {sec.customerSection ? '🔗 顧客画面と連動' : '📋 カンペのみ'}
-          </span>
-          <span style={{ fontFamily: "'Cormorant Garamond'", fontSize: 24, color: C.textLight, fontStyle: 'italic' }}>
-            {sec.label}
-          </span>
-          <span style={{ color: C.textDim, fontSize: 11, fontFamily: "'DM Mono'" }}>
-            {current + 1} / {P_SECTIONS.length}
-          </span>
+      <div style={{ flex:1, overflow:'auto', padding:'26px 40px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:18 }}>
+          <span style={{ padding:'3px 10px', fontSize:11, fontFamily:"'DM Mono'", background:sec.customerSection?`${C.gold}15`:'#1a2a1a', border:`1px solid ${sec.customerSection?C.gold+'40':'#2a4a2a'}`, color:sec.customerSection?C.gold:'#4a8a4a' }}>{sec.customerSection?'🔗 顧客画面と連動':'📋 カンペのみ'}</span>
+          <span style={{ fontFamily:"'Cormorant Garamond'", fontSize:22, color:C.textLight, fontStyle:'italic' }}>{sec.label}</span>
+          <span style={{ color:C.textDim, fontSize:11, fontFamily:"'DM Mono'" }}>{current+1} / {P_SECTIONS.length}</span>
         </div>
-
-        {/* Script */}
-        {sec.script && (
-          <div style={{ marginBottom: 32 }}>
-            <div style={{ fontSize: 11, color: C.textDim, letterSpacing: '0.1em', marginBottom: 8, fontFamily: "'DM Mono'" }}>台本</div>
-            <pre style={{
-              background: '#0d1a0d', border: `1px solid #1a3a1a`,
-              padding: '24px', fontSize: 13.5, lineHeight: 2, color: '#b8e0b8',
-              whiteSpace: 'pre-wrap', fontFamily: "'Noto Sans JP'", borderRadius: 0,
-            }}>
-              {sec.script}
-            </pre>
-          </div>
-        )}
-
-        {/* BANT Checklist */}
-        {sec.bant && (
-          <div style={{ marginBottom: 32 }}>
-            <div style={{ fontSize: 11, color: C.textDim, letterSpacing: '0.1em', marginBottom: 12, fontFamily: "'DM Mono'" }}>BANTチェックリスト</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {BANT_ITEMS.map(item => (
-                <label key={item.id} style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 14, cursor: 'pointer',
-                  padding: '14px 18px',
-                  background: bantChecked[item.id] ? '#0f200f' : '#141210',
-                  border: `1px solid ${bantChecked[item.id] ? '#2a5a2a' : C.border}`,
-                  transition: 'all 0.2s',
-                }}>
-                  <div style={{
-                    width: 18, height: 18, border: `1px solid ${bantChecked[item.id] ? '#4a8a4a' : C.border}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    flexShrink: 0, marginTop: 2, background: bantChecked[item.id] ? '#2a5a2a' : 'transparent',
-                  }}>
-                    {bantChecked[item.id] && <span style={{ color: '#7adc7a', fontSize: 11 }}>✓</span>}
-                  </div>
-                  <span style={{
-                    fontSize: 13, lineHeight: 1.7, color: bantChecked[item.id] ? '#6ab06a' : C.textMid,
-                    textDecoration: bantChecked[item.id] ? 'line-through' : 'none',
-                  }}>{item.label}</span>
-                  <input type="checkbox" checked={!!bantChecked[item.id]} onChange={() => toggleBant(item.id)} style={{ display: 'none' }} />
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Objections */}
-        {sec.objections && (
-          <div>
-            <div style={{ fontSize: 11, color: C.textDim, letterSpacing: '0.1em', marginBottom: 12, fontFamily: "'DM Mono'" }}>切り返しトーク</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {OBJECTIONS.map((obj, i) => (
-                <div key={i}>
-                  <button onClick={() => setOpenObjection(openObjection === i ? null : i)} style={{
-                    width: '100%', padding: '14px 18px', background: '#141210',
-                    border: `1px solid ${openObjection === i ? C.gold + '50' : C.border}`,
-                    color: openObjection === i ? C.goldLight : C.textMid, cursor: 'pointer',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    fontSize: 13, fontFamily: "'Noto Sans JP'", textAlign: 'left',
-                    transition: 'all 0.2s',
-                  }}>
-                    <span>🚫 「{obj.trigger}」と言われたら</span>
-                    <span style={{ fontSize: 10, fontFamily: "'DM Mono'" }}>{openObjection === i ? '▲' : '▼'}</span>
-                  </button>
-                  {openObjection === i && (
-                    <div style={{
-                      padding: '20px 20px 20px 36px',
-                      background: '#16120e', border: `1px solid ${C.gold}30`, borderTop: 'none',
-                      fontSize: 13, lineHeight: 2, color: '#c8b890',
-                    }}>
-                      {obj.response}
-                    </div>
-                  )}
+        {sec.script && <div style={{ marginBottom:24 }}>
+          <div style={{ fontSize:11, color:C.textDim, letterSpacing:'0.1em', marginBottom:7, fontFamily:"'DM Mono'" }}>台本</div>
+          <pre style={{ background:'#0d1a0d', border:`1px solid #1a3a1a`, padding:'20px', fontSize:13, lineHeight:2, color:'#b8e0b8', whiteSpace:'pre-wrap', fontFamily:"'Noto Sans JP'" }}>{sec.script}</pre>
+        </div>}
+        {sec.bant && <div style={{ marginBottom:24 }}>
+          <div style={{ fontSize:11, color:C.textDim, letterSpacing:'0.1em', marginBottom:8, fontFamily:"'DM Mono'" }}>BANTチェックリスト</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
+            {BANT_ITEMS.map(item=>(
+              <label key={item.id} style={{ display:'flex', alignItems:'flex-start', gap:12, cursor:'pointer', padding:'11px 14px', background:bantChecked[item.id]?'#0f200f':'#141210', border:`1px solid ${bantChecked[item.id]?'#2a5a2a':C.border}`, transition:'all 0.2s' }}>
+                <div style={{ width:17, height:17, border:`1px solid ${bantChecked[item.id]?'#4a8a4a':C.border}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2, background:bantChecked[item.id]?'#2a5a2a':'transparent' }}>
+                  {bantChecked[item.id]&&<span style={{ color:'#7adc7a', fontSize:10 }}>✓</span>}
                 </div>
-              ))}
-            </div>
+                <span style={{ fontSize:13, lineHeight:1.7, color:bantChecked[item.id]?'#6ab06a':C.textMid, textDecoration:bantChecked[item.id]?'line-through':'none' }}>{item.label}</span>
+                <input type="checkbox" checked={!!bantChecked[item.id]} onChange={()=>setBantChecked(p=>({...p,[item.id]:!p[item.id]}))} style={{ display:'none' }} />
+              </label>
+            ))}
           </div>
-        )}
-      </div>
-
-      {/* Bottom Navigation */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '16px 40px', background: C.surface, borderTop: `1px solid ${C.border}`, flexShrink: 0,
-      }}>
-        <button onClick={() => setCurrent(c => Math.max(c - 1, 0))} disabled={current === 0} style={{
-          padding: '10px 28px', background: 'none',
-          border: `1px solid ${current === 0 ? C.border : C.gold + '60'}`,
-          color: current === 0 ? C.textDim : C.goldLight, cursor: current === 0 ? 'not-allowed' : 'pointer',
-          fontSize: 12, letterSpacing: '0.08em', fontFamily: "'Noto Sans JP'",
-          transition: 'all 0.2s',
-        }}>← 前へ</button>
-
-        {/* Dot indicators */}
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {P_SECTIONS.map((_, i) => (
-            <button key={i} onClick={() => setCurrent(i)} style={{
-              width: i === current ? 20 : 6, height: 6,
-              background: i === current ? C.gold : C.border,
-              border: 'none', cursor: 'pointer', padding: 0,
-              transition: 'all 0.3s ease', borderRadius: 3,
-            }} />
+        </div>}
+        {sec.objections && <div>
+          <div style={{ fontSize:11, color:C.textDim, letterSpacing:'0.1em', marginBottom:8, fontFamily:"'DM Mono'" }}>切り返しトーク</div>
+          {OBJECTIONS.map((obj,i)=>(
+            <div key={i} style={{ marginBottom:6 }}>
+              <button onClick={()=>setOpenObj(openObj===i?null:i)} style={{ width:'100%', padding:'12px 16px', background:'#141210', border:`1px solid ${openObj===i?C.gold+'50':C.border}`, color:openObj===i?C.goldLight:C.textMid, cursor:'pointer', display:'flex', justifyContent:'space-between', fontSize:13, fontFamily:"'Noto Sans JP'", textAlign:'left', transition:'all 0.2s' }}>
+                <span>🚫 「{obj.trigger}」と言われたら</span><span style={{ fontSize:9 }}>{openObj===i?'▲':'▼'}</span>
+              </button>
+              {openObj===i&&<div style={{ padding:'16px 16px 16px 30px', background:'#16120e', border:`1px solid ${C.gold}30`, borderTop:'none', fontSize:13, lineHeight:2, color:'#c8b890' }}>{obj.response}</div>}
+            </div>
           ))}
-        </div>
-
-        <button onClick={() => setCurrent(c => Math.min(c + 1, P_SECTIONS.length - 1))} disabled={current === P_SECTIONS.length - 1} style={{
-          padding: '10px 28px',
-          background: current === P_SECTIONS.length - 1 ? 'none' : `linear-gradient(135deg, ${C.goldDark}, ${C.goldLight})`,
-          border: `1px solid ${current === P_SECTIONS.length - 1 ? C.border : 'transparent'}`,
-          color: current === P_SECTIONS.length - 1 ? C.textDim : C.charcoal,
-          cursor: current === P_SECTIONS.length - 1 ? 'not-allowed' : 'pointer',
-          fontSize: 12, letterSpacing: '0.08em', fontFamily: "'Noto Sans JP'",
-          transition: 'all 0.2s',
-        }}>次へ →</button>
+        </div>}
+      </div>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 40px', background:C.surface, borderTop:`1px solid ${C.border}`, flexShrink:0 }}>
+        <button onClick={()=>setCurrent(c=>Math.max(c-1,0))} disabled={current===0} style={{ padding:'9px 26px', background:'none', border:`1px solid ${current===0?C.border:C.gold+'60'}`, color:current===0?C.textDim:C.goldLight, cursor:current===0?'not-allowed':'pointer', fontSize:12, letterSpacing:'0.08em' }}>← 前へ</button>
+        <div style={{ display:'flex', gap:5 }}>{P_SECTIONS.map((_,i)=><button key={i} onClick={()=>setCurrent(i)} style={{ width:i===current?18:6, height:6, background:i===current?C.gold:C.border, border:'none', cursor:'pointer', padding:0, transition:'all 0.3s', borderRadius:3 }} />)}</div>
+        <button onClick={()=>setCurrent(c=>Math.min(c+1,P_SECTIONS.length-1))} disabled={current===P_SECTIONS.length-1} style={{ padding:'9px 26px', background:current===P_SECTIONS.length-1?'none':`linear-gradient(135deg,${C.goldDark},${C.goldLight})`, border:`1px solid ${current===P_SECTIONS.length-1?C.border:'transparent'}`, color:current===P_SECTIONS.length-1?C.textDim:C.charcoal, cursor:current===P_SECTIONS.length-1?'not-allowed':'pointer', fontSize:12, letterSpacing:'0.08em' }}>次へ →</button>
       </div>
     </div>
   )
 }
 
-// ─── SHARED COMPONENTS ─────────────────────────────────────────────────────
-function SectionLabel({ en, ja, light }) {
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <div style={{
-        fontFamily: "'Cormorant Garamond'", fontSize: 11, letterSpacing: '0.3em',
-        color: C.gold, textTransform: 'uppercase', marginBottom: 8,
-      }}>{en}</div>
-    </div>
-  )
-}
+// ─── SHARED COMPONENTS ──────────────────────────────────────────────────────
+const SLabel = ({ en }) => <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:11, letterSpacing:'0.36em', color:C.gold, textTransform:'uppercase', marginBottom:14 }}>{en}</div>
+const hS = (color) => ({ fontFamily:"'Cormorant Garamond'", fontSize:'clamp(26px,4vw,46px)', fontWeight:300, color, lineHeight:1.2, marginBottom:14, letterSpacing:'-0.01em' })
+const thS = { padding:'12px 16px', textAlign:'left', fontSize:11, letterSpacing:'0.1em', fontWeight:500 }
+const tdS = { padding:'13px 16px', fontSize:13, borderBottom:`1px solid #ede7d9`, color:C.charcoal }
 
 function FlowChart({ steps, dark }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      {steps.map((step, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 24 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-            <div style={{
-              width: 40, height: 40, border: `2px solid ${C.gold}`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: "'Cormorant Garamond'", fontSize: 16, color: C.gold, fontWeight: 500,
-              background: dark ? C.bg : C.warmWhite, flexShrink: 0,
-            }}>{step.n}</div>
-            {i < steps.length - 1 && (
-              <div style={{ width: 1, height: 40, background: `${C.gold}40` }} />
-            )}
+    <div style={{ display:'flex', flexDirection:'column' }}>
+      {steps.map((step,i) => (
+        <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:18 }}>
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
+            <div style={{ width:34, height:34, border:`2px solid ${C.gold}`, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'Cormorant Garamond'", fontSize:14, color:C.gold, background:dark?C.bg:C.warmWhite }}>{step.n}</div>
+            {i<steps.length-1&&<div style={{ width:1, height:32, background:`${C.gold}35` }} />}
           </div>
-          <div style={{ paddingTop: 8, paddingBottom: 32 }}>
-            <h4 style={{
-              fontFamily: "'Noto Serif JP'", fontSize: 15, fontWeight: 500,
-              color: dark ? C.ivory : C.charcoal, marginBottom: 6,
-            }}>{step.title}</h4>
-            <p style={{ fontSize: 13, color: dark ? '#8a8070' : C.muted, lineHeight: 1.7 }}>{step.desc}</p>
+          <div style={{ paddingTop:5, paddingBottom:24 }}>
+            <h4 style={{ fontFamily:"'Noto Serif JP'", fontSize:14, fontWeight:500, color:dark?C.ivory:C.charcoal, marginBottom:4 }}>{step.title}</h4>
+            <p style={{ fontSize:12, color:dark?'#8a8070':C.muted, lineHeight:1.7 }}>{step.desc}</p>
           </div>
         </div>
       ))}
@@ -1110,22 +754,8 @@ function FlowChart({ steps, dark }) {
   )
 }
 
-function headingStyle(color) {
-  return {
-    fontFamily: "'Cormorant Garamond'", fontSize: 'clamp(28px, 4vw, 48px)',
-    fontWeight: 300, color, lineHeight: 1.2, marginBottom: 16, letterSpacing: '-0.01em',
-  }
-}
-const thStyle = { padding: '14px 20px', textAlign: 'left', fontSize: 12, letterSpacing: '0.08em', fontWeight: 500 }
-const tdStyle = { padding: '16px 20px', fontSize: 14, borderBottom: '1px solid #ede7d9', color: C.charcoal }
-
-// ─── APP ROOT ───────────────────────────────────────────────────────────────
 export default function App() {
   const [route, setRoute] = useState(getRoute())
-  useEffect(() => {
-    const handler = () => setRoute(getRoute())
-    window.addEventListener('popstate', handler)
-    return () => window.removeEventListener('popstate', handler)
-  }, [])
-  return route === 'presenter' ? <PresenterView /> : <CustomerView />
+  useEffect(() => { const h=()=>setRoute(getRoute()); window.addEventListener('popstate',h); return ()=>window.removeEventListener('popstate',h) }, [])
+  return route==='presenter' ? <PresenterView /> : <CustomerView />
 }
