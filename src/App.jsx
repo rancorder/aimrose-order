@@ -248,32 +248,339 @@ function RoseScene() {
 // img-054  Executive with mic      → STEPS: 提携先のターゲット像
 // ════════════════════════════════════════════════════════════════════════════
 
-// ── PRESENTER DATA ────────────────────────────────────────────────────────────
+// ── PRESENTER DATA ─────────────────────────────────────────────────────────────
 const BANT_ITEMS = [
-  {id:'budget',label:'予算：外注にかけられる予算感はどれくらいか？'},
-  {id:'authority',label:'決裁者：最終判断は誰が担当されるか？'},
-  {id:'needs',label:'ニーズ：特に興味を持ったポイントはどこか？'},
-  {id:'timeline',label:'タイムライン：いつ頃から導入をお考えか？'},
+  {id:'budget',    label:'予算感はどれくらいか？（外注1件あたりの想定）'},
+  {id:'authority', label:'最終判断は誰が担当か？（目の前の方か、別に決裁者がいるか）'},
+  {id:'needs',     label:'今日の話で特に刺さったポイントはどこか？'},
+  {id:'timeline',  label:'いつ頃から使い始めたいか？（すぐ/3か月以内/半年以上）'},
 ]
 const OBJECTIONS = [
-  {trigger:'検討したい',response:'ありがとうございます。仕様・納期の詳細は技術者との打ち合わせでないと正確にお伝えできない部分が多いです。30分ほどのお時間で御社の案件に当てはめた具体的な進め方をご提示できますので、次回のお時間だけいただければと思います。'},
-  {trigger:'見送りたい',response:'率直にお話しいただきありがとうございます。外注先としてどこまでお役に立てるかは詳細を確認してみないと判断が難しい部分があります。情報整理の場として、次回30分ほどお時間をいただければ御社にとってメリットがあるかどうかを一緒に確認できればと思います。'},
-  {trigger:'会社の確認が必要',response:'承知いたしました。慎重に進められるのは良いことだと思います。判断材料を揃える意味でも、仕様や納期の詳細は二次商談で具体的にお伝えできます。次回は御社の体制に合わせた具体例をご用意いたしますので、30分ほどお時間をいただければと思います。'},
+  {
+    trigger: '検討したい',
+    response: 'ありがとうございます。ご判断には仕様・納期の詳細が必要かと思いますが、それは技術者との打ち合わせでないと正確にお伝えできない部分が多いです。30分ほどのお時間をいただければ、御社の案件に当てはめた具体的な進め方をご提示できますので、まず次回のお時間だけいただければと思います。',
+    tip: '「いつが都合よいか」まで確認しておく。週内を目安に提案する。',
+  },
+  {
+    trigger: '見送りたい',
+    response: '率直にお話しいただきありがとうございます。ただ、外注先としてお役に立てるかどうかは、詳細を確認してみないと判断が難しい部分があります。情報整理の場として、次回30分ほどお時間をいただければ、御社にとってメリットがあるかどうかを一緒に確認させてください。',
+    tip: '「見送り」の理由を一つ聞き出す。理由がわかれば解決策を提示できる。',
+  },
+  {
+    trigger: '会社に確認が必要',
+    response: '承知いたしました。慎重に進められるのは良いことだと思います。ご確認の際の判断材料として、仕様・納期・費用感の詳細は二次商談で具体的にお伝えできます。次回は御社の体制に合わせた事例もご用意いたしますので、30分ほどお時間をいただければと思います。',
+    tip: '「いつ頃確認が取れそうか」を確認し、フォローの連絡日程を決める。',
+  },
 ]
+
+// セクション定義（台本＋プレゼンターノート）
 const P_SECTIONS = [
-  {id:'intro',label:'イントロ',cs:'intro',script:`本日はお時間をいただきありがとうございます。\n株式会社aim roseの〇〇と申します。\n\n本日は、御社で対応が難しいフルオーダー案件や特殊案件を、弊社が外注先としてお手伝いできる可能性についてお話しできればと思っております。\n\n御社の既存のお客様により良いご提案ができるようになる点や、機会損失を防ぐ点など、メリットを感じていただける内容になっているかと思いますので、ぜひ気軽にお聞きいただければ幸いです。`},
-  {id:'icebreak',label:'アイスブレイク',cs:null,script:`●●様、最初に1点お伺いしてもよろしいでしょうか？\n先日は突然のお電話にも関わらず、ご興味をいただけた理由を先にお伺いしてもよろしいでしょうか？\n\n（相手の回答を受ける）\n\nありがとうございます。そういった背景からご興味をお持ちいただいたんですね。\n\nもしよろしければ、現在どのような案件でお困りの場面が多いのか、少しお聞かせいただけますでしょうか。`},
-  {id:'background',label:'提携の背景',cs:'background',script:`三方よしの考え方でご説明いたします。\n\n【御社のメリット】\nフルオーダー対応で受注機会が広がり、機会損失が減ります。\n\n【お客様のメリット】\nより幅広い選択肢と高品質な製品で満足度がアップします。\n\n【弊社のメリット】\n長年培ってきた技術と経験を最大限に活用できます。`},
-  {id:'strength',label:'弊社の強み',cs:'strength',script:`①職人の技術\nジバンシー、コムデギャルソンなどのハイブランドを担う縫製工場で修得した技術。20年以上の実績。\n\n②総合的な製作能力\nデザイン、パターン、企画、縫製全てを経験し、フルオーダー製作のノウハウを持っています。\n\n③過去の実績\n小澤征爾指揮演劇衣装・森英恵サンプル・東京/関西コレクション・宝塚歌劇団番組での製作指導など。`},
-  {id:'service',label:'サービス内容',cs:'service',script:`外注としてご依頼いただく場合は、まず案件内容をヒアリングし、仕様・素材・納期などを確認したうえで制作に入ります。\n\n提携方法は2種類ございます：\n① 非対面式受注（フリーサイズサンプルによる）\n② 対面式受注（フルオーダー出張対応）`},
-  {id:'method1',label:'提携方法①',cs:'method1',script:`【提携方法1：非対面式受注】\nフリーサイズ（S〜L対応）のデザインサンプルを店内またはHP上に展示。丈だけの簡単な調整で受注できます。\n\n料金例（税別）：コート ¥50,000〜 / スーツ ¥50,000〜 / ジャケット ¥35,000〜\n\n納期：材料が揃ってから1ヶ月半〜2ヶ月`},
-  {id:'method2',label:'提携方法②',cs:'method2',script:`【提携方法2：フルオーダー対面式受注】\nお客様からフルオーダーの依頼を受けたら、弊社に出張依頼いただきます。\n\n出張費：近距離(20km以内) ¥10,000 / 中距離(〜50km) ¥20,000 / 長距離(50km以上) ¥40,000\n＋交通費（受注日・仮縫い日の計2〜3回分含む）\n\n納期：2〜3ヶ月`},
-  {id:'pricing',label:'料金表',cs:'pricing',script:`フルオーダー料金表（税別）：\n・コート：パターン ¥55,000〜 / 製作 ¥90,000〜\n・ジャケット・ブルゾン：¥50,000〜 / ¥70,000〜\n・ワンピース：¥45,000〜 / ¥60,000〜\n・パンツ・スカート：¥35,000〜 / ¥30,000〜\n・シャツ：¥35,000〜 / ¥35,000〜\n\n✦ ご紹介リピート → 御社に20%キャッシュバック`},
-  {id:'wholesale',label:'卸販売',cs:'wholesale',script:`卸販売もご提供しています。\n\nポケットチーフ：1柄 ¥2,900→¥1,450 / 2柄 ¥3,500→¥1,750\nミニネクタイ：¥3,900→¥1,950\nミニ蝶ネクタイ：¥3,900→¥1,950\n\n最低発注 ¥10,000〜 / 送料別途`},
-  {id:'hearing',label:'ヒアリング',cs:null,bant:true,script:`ここからは御社の現状を伺えればと思います。\n\n・特殊体型のお客様をお断りする場面はどれくらいあるか\n・仕様の制約で対応が難しいケースはあるか\n・外注先を探されたことがあるか、その際の不安\n・今後強化したいサービス領域\n\n【BANT確認 ↓ チェックリストを活用】`},
-  {id:'qa',label:'Q&A想定',cs:null,script:`Q1: 仕様対応範囲は？ → 特殊体型・素材含め柔軟に。詳細は技術者との打ち合わせで。\nQ2: 納期は？ → 案件内容により変動。詳細は二次商談で。\nQ3: 一点物でも？ → はい、むしろ一点物フルオーダーは得意です。\nQ4: 複数着も？ → 可能。ロット少ない場合は単価が上がりますが事前にご相談。\nQ5: 品質面は？ → 著名な経営者層のスーツ制作実績あり。\nQ6: 料金は？ → 仕様確認後にご提示。\nQ7: 急ぎの案件は？ → 内容により可能な範囲で調整。`},
-  {id:'closing',label:'クロージング',cs:'steps',objections:true,script:`ありがとうございます。\nもしよろしければ、まずは御社の体制やご希望を伺いながら、最適なプランを具体化させていただければと思っています。\n\n「〇月〇日（〇曜日）」か「〇月〇日（〇曜日）」にお時間いただくことは可能でしょうか？\n\n【日程調整トーク】\n午前・午後どちらがご都合よろしいでしょうか。\n●時と●時ではどちらがよろしいでしょうか。`},
-  {id:'contact',label:'お問い合わせ',cs:'contact',script:`本日はありがとうございました。\n\n株式会社 aim-rose（エイムローズ）\n〒542-0081 大阪市中央区南船場2-2-28\nジェイ・プライド順慶ビル205\n\nTEL: 06-6261-7373 / FAX: 06-6261-7372\nHP: https://aim-rose-order.com/`},
+  {
+    id: 'intro', label: 'イントロ', cs: 'intro', min: 1,
+    goal: '第一印象でプロフェッショナルな雰囲気をつくる。相手に「聞いてみよう」と思わせる。',
+    photo: 'img-002.jpg',
+    script: `本日はお時間をいただきありがとうございます。
+株式会社aim roseの〇〇と申します。
+
+本日は、御社で対応が難しいフルオーダー案件や特殊案件を、弊社が外注先としてお手伝いできる可能性についてお話しできればと思っております。
+
+御社の既存のお客様により良いご提案ができるようになる点や、機会損失を防ぐ点など、メリットを感じていただける内容になっているかと思います。ぜひ気軽にお聞きいただければ幸いです。
+
+どうぞよろしくお願いいたします。`,
+    points: [
+      '話すテンポをゆっくり目に。焦らない。',
+      '「機会損失」という言葉を意識的に強調する。',
+      '最初から売り込まない。「可能性について話す」というスタンスを保つ。',
+    ],
+  },
+  {
+    id: 'icebreak', label: 'アイスブレイク', cs: null, min: 3,
+    goal: '先方の興味の理由・現状の課題を聞き出し、商談の方向性を把握する。',
+    photo: null,
+    script: `●●様、最初に1点お伺いしてもよろしいでしょうか？
+先日は突然のお電話にも関わらずご興味をいただけた理由を、先にお聞かせいただけますか？
+
+（相手の回答をしっかり聞く）
+
+ありがとうございます。〇〇という背景からご興味をお持ちいただいたんですね。
+
+もしよろしければ、現在どのような案件でお困りの場面が多いのか、もう少し聞かせていただけますか？
+たとえば特殊体型のお客様の対応が難しいケース、素材の制約でお断りしているケースなど、日常的に困りやすいポイントはどのあたりでしょうか？
+
+（回答をメモしながら傾聴。「なるほど」「それは大変ですね」で共感を示す）
+
+ありがとうございます。そういった状況があるんですね。
+実はその点で、弊社がお力になれる可能性が高いんです。`,
+    points: [
+      '相手が話している間は絶対に遮らない。メモを取りながら聞く。',
+      '回答の中のキーワードを後半の提案で必ず使う（「先ほど〇〇とおっしゃっていた点ですが…」）。',
+      '困りごとが出たら「それは具体的にどれくらいの頻度で？」と深掘りする。',
+    ],
+    watch: '相手が話し好きなら時間を使いすぎないよう注意。3分以内を目安に。',
+  },
+  {
+    id: 'background', label: '提携の背景', cs: 'background', min: 2,
+    goal: '「全員が得をする提携」というフレームを印象づける。一方的な売り込みではないと示す。',
+    photo: 'img-014.jpg',
+    script: `弊社がご提案する提携は、三方よしの構造になっています。
+
+まず御社のメリットとして、フルオーダー対応で受注機会が広がり、これまでお断りしていたお客様からの注文も取れるようになります。機会損失が減ります。
+
+次にお客様のメリットとして、より幅広い選択肢と高品質な製品をご提供できることで、満足度がアップしリピートにつながります。
+
+そして弊社にとっても、長年培ってきた技術と経験を最大限に活用できます。
+
+つまり誰かが損をする関係ではなく、三者全員にメリットのある提携です。`,
+    points: [
+      '「三方よし」の言葉は日本人に響く。ゆっくり丁寧に説明する。',
+      '御社のメリットを一番最初・一番詳しく話す。相手の関心はそこだけ。',
+      '弊社のメリットはサラッと最後に言う程度でOK。',
+    ],
+  },
+  {
+    id: 'strength', label: '弊社の強み', cs: 'strength', min: 3,
+    goal: '「この会社は本物だ」という信頼感を積み上げる。実績の具体性が鍵。',
+    photo: 'img-083.jpg',
+    script: `弊社には3つの大きな強みがあります。
+
+まず①職人の技術。
+ジバンシー、コムデギャルソンなど、ハイブランドを担う縫製工場で修得した技術を持っています。20年以上の実績で、多ジャンル・フルアイテムの製作をしてきました。
+
+次に②総合的な製作能力。
+デザイン、パターン、企画、縫製—すべてのプロセスを経験しています。フルオーダーを一気通貫で進められるのが弊社の強みです。
+
+そして③過去の実績として、
+小澤征爾指揮による演劇舞台の衣装製作、森英恵デザイナーのサンプル製作、東京・関西コレクション出店ブランドの衣装、宝塚歌劇団番組での製作指導など、幅広い分野で実績があります。
+
+一般のスーツ店様ではお断りになるような特殊な案件も、弊社では得意としております。`,
+    points: [
+      '固有名詞（小澤征爾、宝塚、コレクション）を明確に発音する。ここが信頼の核心。',
+      '「普通のスーツ店では難しい案件」という言い方で、御社との差別化を自然に行う。',
+      'スクリーンの実績ギャラリー写真を指しながら「こういった作品も手がけています」と補足できると効果的。',
+    ],
+    watch: '実績の羅列になりすぎないよう注意。1〜2個絞って深く語る方が効果的な場合もある。',
+  },
+  {
+    id: 'service', label: 'サービス内容', cs: 'service', min: 2,
+    goal: '2つの提携方法の存在を認識させ、「どちらが自社に合うか」を考えてもらう。',
+    photo: 'img-060.jpg',
+    script: `外注としてご依頼いただく流れはシンプルです。
+まず案件内容をヒアリングし、仕様・素材・納期などを確認したうえで制作に入ります。
+
+提携の方法は大きく2種類あります。
+
+一つ目は「非対面式受注」。
+弊社で制作したフリーサイズのサンプルを御社の店頭やHPに展示していただき、丈の調整だけで受注できる方法です。手軽に始めやすいのが特徴です。
+
+二つ目は「対面式受注」。
+お客様がフルオーダーをご希望の場合に、弊社が御社に出張して、共同で受注する方法です。完全オーダーメイドに対応できます。
+
+どちらの方法が御社の状況に合っているか、後ほどご確認いただければと思います。`,
+    points: [
+      '「どちらが合いそうですか？」と一言聞いてみると相手の関心が見える。',
+      '手軽さを売りにしたいなら方法①、高付加価値を売りにしたいなら方法②を強調。',
+      'アイスブレイクで聞いた課題に合わせて、どちらの方法が刺さるかをイメージしながら話す。',
+    ],
+  },
+  {
+    id: 'method1', label: '提携方法①', cs: 'method1', min: 3,
+    goal: '「すぐに始められる」「リスクが低い」という安心感を伝える。',
+    photo: 'img-024.jpg',
+    script: `提携方法①は、フリーサイズのサンプルを使った非対面式の受注です。
+
+流れを説明しますと、まず弊社がS〜L対応のデザインサンプルを制作します。これを御社の店内またはHPに展示していただきます。
+
+お客様からご注文が入ったら、丈の調整だけで受注できる仕組みです。パターンや仕様の知識は不要です。
+
+受注後は弊社に発注いただき、資材調達から製作まで全て弊社が担当します。
+
+料金は税別で、コートやスーツが通常¥100,000、サンプル特別価格は¥50,000からご提供しています。納期は材料が揃ってから1ヶ月半〜2ヶ月が目安です。
+
+販売価格は御社で自由に設定いただけます。`,
+    points: [
+      '「丈だけの調整で受注できる」という簡便さを強調する。難しくないことを伝える。',
+      '「サンプル特別価格」という言い方をする。まず試してもらうことがゴール。',
+      'スクリーンのサンプル写真（チェック柄ドレス、グリーントレンチ）を指して「こういった商品です」と具体的に示す。',
+    ],
+    watch: '「生地はご準備ください」という条件を必ず伝える。後でトラブルになりやすい。',
+  },
+  {
+    id: 'method2', label: '提携方法②', cs: 'method2', min: 3,
+    goal: '「本格的なフルオーダーを御社ブランドで提供できる」という付加価値を訴求する。',
+    photo: 'img-028.jpg',
+    script: `提携方法②は、完全なフルオーダーの対面式受注です。
+
+お客様からフルオーダーのご依頼があった際に、弊社に連絡をいただきます。日程を調整してから弊社が御社へ出張し、一緒にご注文を受けます。
+
+その後、仮縫いを1〜2回行い、体型に合わせた細かな調整を経て、弊社で全て製作します。
+
+納期は2〜3ヶ月が目安です。仮縫いのタイミングにより前後します。
+
+出張費は距離に応じてかかりますが、20km以内なら交通費別途¥10,000です。受注日と仮縫い日の合計2〜3回分が含まれています。
+
+ご紹介いただいたお客様が弊社でリピートされた場合は、以後のオーダーのたびに御社へ20%をキャッシュバックいたします。`,
+    points: [
+      '「御社のブランドで提供できる」という言い方をする。弊社名は前面に出さないスタンス。',
+      '「20%キャッシュバック」は必ずゆっくり、はっきり言う。ここで目が変わることが多い。',
+      'スクリーンの着用写真を見せながら「この品質のものが御社のお客様に提供できます」と伝える。',
+    ],
+    watch: '出張費の説明を省かない。費用感をぼかすと後で不信感につながる。',
+  },
+  {
+    id: 'pricing', label: '料金表', cs: 'pricing', min: 2,
+    goal: '価格の透明性を示し、「思ったより理解しやすい」という安心感を持ってもらう。',
+    photo: 'img-044.jpg',
+    script: `フルオーダーの料金体系をご説明します。
+
+料金は「パターン代」と「製作代」に分かれています。
+
+コートはパターン¥55,000〜、製作¥90,000〜。ジャケットはパターン¥50,000〜、製作¥70,000〜。ワンピースはパターン¥45,000〜、製作¥60,000〜です。
+
+重要なポイントとして、同じパターンを2着目以降に使う場合はパターン代が不要になります。
+
+また革素材は別途¥20,000、チェックや柄合わせは¥10,000のオプションとなります。
+
+販売価格は御社で自由に設定いただけますので、利益率は御社のご判断で設定できます。`,
+    points: [
+      '「パターン代不要（2着目〜）」は強いメリット。複数受注が見込める場合は特に強調。',
+      '「販売価格は御社で自由設定」という言葉で、マージンを取れることを印象づける。',
+      '高すぎると感じる表情があれば「お客様への販売価格は自由ですので、例えば…」と続ける。',
+    ],
+    watch: '価格だけの話になりすぎると安売り競争に見える。「品質と価格のバランス」という文脈を保つ。',
+  },
+  {
+    id: 'wholesale', label: '卸販売', cs: 'wholesale', min: 2,
+    goal: '「すぐ仕入れられる小物がある」という手軽な入口を提示する。',
+    photo: 'img-071.jpg',
+    script: `フルオーダー以外に、手軽に始められる卸販売もご用意しています。
+
+ポケットチーフは1柄タイプが定価¥2,900のところ卸値¥1,450、2柄タイプが定価¥3,500のところ¥1,750です。
+
+ミニネクタイとミニ蝶ネクタイはそれぞれ定価¥3,900のところ卸値¥1,950とほぼ半額でご提供しています。
+
+最低発注は¥10,000から、送料は別途となります。
+
+生地を持ち込んでいただいての加工も承っており、チーフ1枚¥3,000、10枚以上なら¥1,000/枚となります。
+
+スーツをご購入のお客様への小物提案として、追加収益の柱にしていただけます。`,
+    points: [
+      '「すぐ始められる」「リスクが低い」入口として提示する。フルオーダーに迷っている相手への別ルート。',
+      '小物は在庫リスクが低い。「試しにここから始める」という提案ができる。',
+      '「スーツとの組み合わせ提案ができる」という付加価値の話に広げてもよい。',
+    ],
+  },
+  {
+    id: 'hearing', label: 'ヒアリング', cs: null, min: 5, bant: true,
+    goal: '相手の状況・課題・決定プロセスを把握し、二次商談に必要な情報を揃える。',
+    photo: null,
+    script: `ここまで一方的にお話ししてしまいましたが、ここからは御社の状況をお聞きできればと思います。
+
+まず現状についてお聞きしてもよいでしょうか。
+特殊体型のお客様をお断りする場面は、月にどのくらいありますか？
+
+（回答を受ける）
+
+外注先を使ったことはありますか？その際に困ったことや不安だったことはありましたか？
+
+（回答を受ける）
+
+今後、御社として特に強化していきたいサービスの方向性はありますか？
+
+ありがとうございます。それでは実現可能な進め方を設計するために、差し支えない範囲でいくつか確認させてください。
+
+（BANTチェックリストを参照しながら確認）`,
+    points: [
+      'この時間が商談の山場。焦らず、相手に十分話してもらう。',
+      '回答を復唱して「〇〇ということですね」と確認することで信頼感が増す。',
+      'BANT全部聞こうとしなくていい。自然な会話の中で2〜3個取れれば十分。',
+    ],
+    watch: '一問一答になりすぎると尋問に見える。会話として流れるように。',
+  },
+  {
+    id: 'qa', label: 'Q&A想定', cs: null, min: 3,
+    goal: '想定される質問に即座・自信を持って答え、信頼感を高める。',
+    photo: null,
+    script: `想定Q&Aです。質問が来たときのガイドとして使ってください。
+
+Q: どこまでの仕様に対応できますか？
+→ 特殊体型・特殊素材・特殊仕様も含め幅広く対応可能です。詳細は技術者との打ち合わせで確認しながら進めます。
+
+Q: 納期はどれくらいですか？
+→ 案件内容によって変動します。詳細は二次商談で具体的に確認させてください。
+
+Q: 一点物でも依頼できますか？
+→ はい、問題ありません。むしろ一点物のフルオーダーは得意としております。
+
+Q: 複数着の制作も可能ですか？
+→ 可能です。ロットが少ない場合は単価が上がることがありますが、事前にご相談しながら進めます。
+
+Q: 品質面が心配です。
+→ 著名な経営者層のスーツ制作実績もあり、細部まで丁寧に仕上げる技術力を評価いただいております。
+
+Q: 急ぎの案件でも対応できますか？
+→ 内容によりますが可能な範囲で調整いたします。まずご相談ください。`,
+    points: [
+      '「詳細は二次商談で」という返しを多用する。すべて今日決めようとしない。',
+      '答えに詰まったときは「すみません、その点は詳細確認して改めてご連絡します」が誠実で好印象。',
+      '質問が来ること自体は興味の証拠。ポジティブに受け取る。',
+    ],
+  },
+  {
+    id: 'closing', label: 'クロージング', cs: 'steps', min: 3, objections: true,
+    goal: '二次商談の日程を決めて終わる。今日の商談をクローズドにしない。',
+    photo: 'img-054.jpg',
+    script: `ありがとうございます。
+いろいろとお話しいただけて大変参考になりました。
+
+もしよろしければ、まずは御社の体制やご希望を伺いながら、最適なプランを具体的にご提示する場をいただけますでしょうか。
+
+たとえば「〇月〇日（〇曜日）」か「〇月〇日（〇曜日）」ではいかがでしょうか？
+
+（相手の反応を見ながら）
+お時間は午前と午後はどちらがご都合よろしいでしょうか。
+
+ありがとうございます。では●月●日の●時でお時間を頂戴できればと思います。
+
+本日、私の方からのご案内は以上となりますが、何かご不明点はございますか？
+
+（回答不可の場合）
+承知いたしました。次回の打ち合わせの際に改めてご説明いたします。
+
+本日はありがとうございました。`,
+    points: [
+      '日程は「いつが空いてますか？」ではなく「〇日か〇日はいかがですか？」と二択で提示する。',
+      '相手が「検討します」と言いそうな雰囲気なら、切り返しトークを準備する（下のアコーディオン参照）。',
+      '最後に必ず「本日のご感想は？」か「特に気になった点は？」と一言聞くと温度感がわかる。',
+    ],
+    watch: '帰り際に「あ、一つ聞いていいですか」という質問が本音のことが多い。時間を作る。',
+  },
+  {
+    id: 'contact', label: 'お問い合わせ', cs: 'contact', min: 1,
+    goal: '連絡先を確実に伝え、次のアクションへのハードルを下げる。',
+    photo: 'img-083.jpg',
+    script: `本日はありがとうございました。
+
+ご連絡先をお伝えします。
+
+株式会社 aim-rose（エイムローズ）
+〒542-0081 大阪市中央区南船場2-2-28
+ジェイ・プライド順慶ビル205
+
+電話：06-6261-7373
+FAX：06-6261-7372
+HP：https://aim-rose-order.com/
+
+また、提携店様専用の公式LINEもございます。
+こちらにご登録いただければ、案件のご相談がすぐにできますので、よろしければご登録をお願いいたします。
+
+本日いただいた名刺の情報でフォローのご連絡をさせていただきます。
+引き続きどうぞよろしくお願いいたします。`,
+    points: [
+      '公式LINEへの登録をその場でお願いする。QRコードを見せながら誘導。',
+      '次回のリマインドを「3日後に確認のご連絡をします」と伝えておく。',
+      '名刺交換がまだなら必ずこのタイミングで。',
+    ],
+  },
 ]
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -739,72 +1046,217 @@ function CustomerView() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// PRESENTER VIEW
+// PRESENTER VIEW — 3カラム構成
 // ════════════════════════════════════════════════════════════════════════════
+function useElapsedTimer() {
+  const [elapsed, setElapsed] = useState(0)
+  const startRef = useRef(Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setElapsed(Math.floor((Date.now() - startRef.current) / 1000)), 1000)
+    return () => clearInterval(t)
+  }, [])
+  const mm = String(Math.floor(elapsed / 60)).padStart(2, '0')
+  const ss = String(elapsed % 60).padStart(2, '0')
+  return `${mm}:${ss}`
+}
+
 function PresenterView() {
-  const [current,setCurrent]=useState(0)
-  const [bantChecked,setBantChecked]=useState({})
-  const [openObj,setOpenObj]=useState(null)
-  const sendSync=useSyncSend()
-  const sec=P_SECTIONS[current]
-  useEffect(()=>{ if(sec.cs&&CUSTOMER_MAP[sec.cs]) sendSync(CUSTOMER_MAP[sec.cs]) },[current])
-  useEffect(()=>{ const h=e=>{ if(e.key==='ArrowRight')setCurrent(c=>Math.min(c+1,P_SECTIONS.length-1)); if(e.key==='ArrowLeft')setCurrent(c=>Math.max(c-1,0)) }; window.addEventListener('keydown',h); return()=>window.removeEventListener('keydown',h) },[])
-  const progress=(current/(P_SECTIONS.length-1))*100
+  const [current, setCurrent] = useState(0)
+  const [bantChecked, setBantChecked] = useState({})
+  const [openObj, setOpenObj] = useState(null)
+  const [noteOpen, setNoteOpen] = useState(true)
+  const sendSync = useSyncSend()
+  const elapsed = useElapsedTimer()
+  const sec = P_SECTIONS[current]
+  const nextSec = P_SECTIONS[current + 1] || null
+  const progress = (current / (P_SECTIONS.length - 1)) * 100
+
+  useEffect(() => { if (sec.cs && CUSTOMER_MAP[sec.cs]) sendSync(CUSTOMER_MAP[sec.cs]) }, [current])
+  useEffect(() => {
+    const h = e => {
+      if (e.key === 'ArrowRight') setCurrent(c => Math.min(c + 1, P_SECTIONS.length - 1))
+      if (e.key === 'ArrowLeft') setCurrent(c => Math.max(c - 1, 0))
+    }
+    window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h)
+  }, [])
+
+  const panelBg = '#111009'
+  const panelBorder = '#252018'
+
   return (
-    <div style={{background:C.bg,color:C.textLight,fontFamily:"'Noto Sans JP', sans-serif",minHeight:'100vh',display:'flex',flexDirection:'column'}}>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 24px',background:C.surface,borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
-        <div style={{display:'flex',alignItems:'center',gap:12}}>
-          <span style={{padding:'4px 12px',background:`${C.gold}20`,border:`1px solid ${C.gold}50`,color:C.goldLight,fontSize:11,letterSpacing:'0.1em'}}>PRESENTER MODE</span>
-          <span style={{color:C.textDim,fontSize:12,fontFamily:"'Cormorant Garamond'"}}>aim-rose 提携プレゼン</span>
+    <div style={{ background: C.bg, color: C.textLight, fontFamily: "'Noto Sans JP', sans-serif", minHeight: '100vh', display: 'flex', flexDirection: 'column', fontSize: 13 }}>
+
+      {/* ── TOP BAR ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 20px', background: '#0a0908', borderBottom: `1px solid ${C.border}`, flexShrink: 0, gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ padding: '3px 10px', background: `${C.gold}22`, border: `1px solid ${C.gold}55`, color: C.goldLight, fontSize: 10, letterSpacing: '0.12em' }}>PRESENTER MODE</span>
+          <span style={{ color: C.textDim, fontSize: 11, fontFamily: "'Cormorant Garamond'", fontStyle: 'italic' }}>aim-rose 提携プレゼン</span>
         </div>
-        <a href="/" target="_blank" rel="noopener noreferrer" style={{padding:'6px 16px',background:'none',border:`1px solid ${C.border}`,color:C.textMid,fontSize:11,letterSpacing:'0.08em',textDecoration:'none'}}>↗ 顧客画面を開く</a>
-      </div>
-      <div style={{height:2,background:C.border,flexShrink:0}}>
-        <div style={{height:'100%',width:`${progress}%`,background:`linear-gradient(90deg,${C.goldDark},${C.goldLight})`,transition:'width 0.4s ease'}}/>
-      </div>
-      <div style={{display:'flex',overflow:'auto',background:C.surface,borderBottom:`1px solid ${C.border}`,flexShrink:0,scrollbarWidth:'none'}}>
-        {P_SECTIONS.map((s,i)=><button key={s.id} onClick={()=>setCurrent(i)} style={{padding:'10px 18px',background:'none',border:'none',borderBottom:i===current?`2px solid ${C.gold}`:'2px solid transparent',color:i===current?C.goldLight:C.textDim,cursor:'pointer',fontSize:11,letterSpacing:'0.05em',whiteSpace:'nowrap',transition:'color 0.2s'}}>{s.label}</button>)}
-      </div>
-      <div style={{flex:1,overflow:'auto',padding:'26px 40px'}}>
-        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:18}}>
-          <span style={{padding:'3px 10px',fontSize:11,background:sec.cs?`${C.gold}15`:'#1a2a1a',border:`1px solid ${sec.cs?C.gold+'40':'#2a4a2a'}`,color:sec.cs?C.gold:'#4a8a4a'}}>{sec.cs?'🔗 顧客画面と連動':'📋 カンペのみ'}</span>
-          <span style={{fontFamily:"'Cormorant Garamond'",fontSize:22,color:C.textLight,fontStyle:'italic'}}>{sec.label}</span>
-          <span style={{color:C.textDim,fontSize:11}}>{current+1} / {P_SECTIONS.length}</span>
+        {/* Timer */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ color: C.textDim, fontSize: 10 }}>経過</span>
+          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 16, color: elapsed.startsWith('0') && parseInt(elapsed.split(':')[0]) < 1 ? C.goldLight : parseInt(elapsed.split(':')[0]) >= 20 ? '#e07070' : '#70c070', letterSpacing: '0.1em' }}>{elapsed}</span>
+          <span style={{ color: C.textDim, fontSize: 10 }}>目安 {sec.min}分</span>
         </div>
-        {sec.script&&<div style={{marginBottom:24}}>
-          <div style={{fontSize:11,color:C.textDim,letterSpacing:'0.1em',marginBottom:7}}>台本</div>
-          <pre style={{background:'#0d1a0d',border:`1px solid #1a3a1a`,padding:'20px',fontSize:13,lineHeight:2,color:'#b8e0b8',whiteSpace:'pre-wrap',fontFamily:"'Noto Sans JP'"}}>{sec.script}</pre>
-        </div>}
-        {sec.bant&&<div style={{marginBottom:24}}>
-          <div style={{fontSize:11,color:C.textDim,letterSpacing:'0.1em',marginBottom:8}}>BANTチェックリスト</div>
-          <div style={{display:'flex',flexDirection:'column',gap:7}}>
-            {BANT_ITEMS.map(item=>(
-              <label key={item.id} style={{display:'flex',alignItems:'flex-start',gap:12,cursor:'pointer',padding:'11px 14px',background:bantChecked[item.id]?'#0f200f':'#141210',border:`1px solid ${bantChecked[item.id]?'#2a5a2a':C.border}`,transition:'all 0.2s'}}>
-                <div style={{width:17,height:17,border:`1px solid ${bantChecked[item.id]?'#4a8a4a':C.border}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:2,background:bantChecked[item.id]?'#2a5a2a':'transparent'}}>
-                  {bantChecked[item.id]&&<span style={{color:'#7adc7a',fontSize:10}}>✓</span>}
-                </div>
-                <span style={{fontSize:13,lineHeight:1.7,color:bantChecked[item.id]?'#6ab06a':C.textMid,textDecoration:bantChecked[item.id]?'line-through':'none'}}>{item.label}</span>
-                <input type="checkbox" checked={!!bantChecked[item.id]} onChange={()=>setBantChecked(p=>({...p,[item.id]:!p[item.id]}))} style={{display:'none'}}/>
-              </label>
-            ))}
+        <a href="/" target="_blank" rel="noopener noreferrer" style={{ padding: '5px 14px', background: 'none', border: `1px solid ${C.border}`, color: C.textMid, fontSize: 10, textDecoration: 'none' }}>↗ 顧客画面</a>
+      </div>
+
+      {/* ── PROGRESS BAR ── */}
+      <div style={{ height: 2, background: '#1a1610', flexShrink: 0 }}>
+        <div style={{ height: '100%', width: `${progress}%`, background: `linear-gradient(90deg,${C.goldDark},${C.goldLight})`, transition: 'width 0.4s ease' }} />
+      </div>
+
+      {/* ── TAB NAV ── */}
+      <div style={{ display: 'flex', overflow: 'auto', background: '#0d0b08', borderBottom: `1px solid ${C.border}`, flexShrink: 0, scrollbarWidth: 'none' }}>
+        {P_SECTIONS.map((s, i) => (
+          <button key={s.id} onClick={() => setCurrent(i)} style={{ padding: '8px 14px', background: 'none', border: 'none', borderBottom: i === current ? `2px solid ${C.gold}` : '2px solid transparent', color: i === current ? C.goldLight : i < current ? '#4a3f30' : C.textDim, cursor: 'pointer', fontSize: 10, letterSpacing: '0.05em', whiteSpace: 'nowrap', transition: 'color 0.15s', position: 'relative' }}>
+            {i < current && <span style={{ position: 'absolute', top: 4, right: 4, width: 5, height: 5, borderRadius: '50%', background: '#3a6a3a' }} />}
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── SECTION HEADER ── */}
+      <div style={{ padding: '12px 20px', background: panelBg, borderBottom: `1px solid ${panelBorder}`, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ padding: '2px 9px', fontSize: 10, background: sec.cs ? `${C.gold}18` : '#152215', border: `1px solid ${sec.cs ? C.gold + '45' : '#2a4a2a'}`, color: sec.cs ? C.gold : '#4a8a4a' }}>
+          {sec.cs ? '🔗 顧客画面と連動' : '📋 カンペのみ'}
+        </span>
+        <span style={{ fontFamily: "'Cormorant Garamond'", fontSize: 20, color: C.ivory, fontStyle: 'italic' }}>{sec.label}</span>
+        <span style={{ color: C.textDim, fontSize: 10 }}>{current + 1} / {P_SECTIONS.length}</span>
+        <span style={{ marginLeft: 'auto', fontSize: 10, color: C.textDim }}>← → キーでも移動</span>
+      </div>
+
+      {/* ── MAIN 3-COLUMN AREA ── */}
+      <div style={{ flex: 1, overflow: 'hidden', display: 'grid', gridTemplateColumns: '1fr 300px', minHeight: 0 }}>
+
+        {/* ── LEFT: 台本 ── */}
+        <div style={{ overflow: 'auto', borderRight: `1px solid ${panelBorder}`, display: 'flex', flexDirection: 'column' }}>
+
+          {/* ゴール */}
+          <div style={{ padding: '12px 20px', background: '#0f1a0f', borderBottom: `1px solid #1a2a1a`, flexShrink: 0 }}>
+            <span style={{ fontSize: 10, color: '#4a8a4a', letterSpacing: '0.1em', marginRight: 8 }}>▶ このセクションのゴール</span>
+            <span style={{ fontSize: 12, color: '#90c890', lineHeight: 1.6 }}>{sec.goal}</span>
           </div>
-        </div>}
-        {sec.objections&&<div>
-          <div style={{fontSize:11,color:C.textDim,letterSpacing:'0.1em',marginBottom:8}}>切り返しトーク</div>
-          {OBJECTIONS.map((obj,i)=>(
-            <div key={i} style={{marginBottom:6}}>
-              <button onClick={()=>setOpenObj(openObj===i?null:i)} style={{width:'100%',padding:'12px 16px',background:'#141210',border:`1px solid ${openObj===i?C.gold+'50':C.border}`,color:openObj===i?C.goldLight:C.textMid,cursor:'pointer',display:'flex',justifyContent:'space-between',fontSize:13,fontFamily:"'Noto Sans JP'",textAlign:'left',transition:'all 0.2s'}}>
-                <span>🚫 「{obj.trigger}」と言われたら</span><span style={{fontSize:9}}>{openObj===i?'▲':'▼'}</span>
-              </button>
-              {openObj===i&&<div style={{padding:'16px 16px 16px 30px',background:'#16120e',border:`1px solid ${C.gold}30`,borderTop:'none',fontSize:13,lineHeight:2,color:'#c8b890'}}>{obj.response}</div>}
+
+          {/* 台本 */}
+          <div style={{ padding: '16px 20px', flex: 1 }}>
+            <div style={{ fontSize: 10, color: C.textDim, letterSpacing: '0.12em', marginBottom: 8 }}>台本テキスト</div>
+            <pre style={{ background: '#0a140a', border: `1px solid #182018`, padding: '18px 20px', fontSize: 13.5, lineHeight: 2.1, color: '#c8e8c8', whiteSpace: 'pre-wrap', fontFamily: "'Noto Sans JP'", margin: 0 }}>
+              {sec.script}
+            </pre>
+          </div>
+
+          {/* BANTチェックリスト */}
+          {sec.bant && (
+            <div style={{ padding: '0 20px 16px' }}>
+              <div style={{ fontSize: 10, color: C.textDim, letterSpacing: '0.12em', marginBottom: 8, marginTop: 4 }}>BANTチェックリスト — ヒアリング中に確認</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {BANT_ITEMS.map(item => (
+                  <label key={item.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '10px 14px', background: bantChecked[item.id] ? '#0d1f0d' : '#131108', border: `1px solid ${bantChecked[item.id] ? '#2a5a2a' : C.border}`, transition: 'all 0.2s' }}>
+                    <div style={{ width: 16, height: 16, border: `1px solid ${bantChecked[item.id] ? '#4a8a4a' : C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2, background: bantChecked[item.id] ? '#2a5a2a' : 'transparent' }}>
+                      {bantChecked[item.id] && <span style={{ color: '#7adc7a', fontSize: 9 }}>✓</span>}
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 12, lineHeight: 1.6, color: bantChecked[item.id] ? '#5a9a5a' : C.textMid, textDecoration: bantChecked[item.id] ? 'line-through' : 'none' }}>{item.label}</span>
+                    </div>
+                    <input type="checkbox" checked={!!bantChecked[item.id]} onChange={() => setBantChecked(p => ({ ...p, [item.id]: !p[item.id] }))} style={{ display: 'none' }} />
+                  </label>
+                ))}
+              </div>
             </div>
-          ))}
-        </div>}
+          )}
+
+          {/* 切り返しトーク */}
+          {sec.objections && (
+            <div style={{ padding: '0 20px 20px' }}>
+              <div style={{ fontSize: 10, color: C.textDim, letterSpacing: '0.12em', marginBottom: 8 }}>切り返しトーク — クロージング時に使用</div>
+              {OBJECTIONS.map((obj, i) => (
+                <div key={i} style={{ marginBottom: 6 }}>
+                  <button onClick={() => setOpenObj(openObj === i ? null : i)} style={{ width: '100%', padding: '10px 14px', background: openObj === i ? '#1a1206' : '#131108', border: `1px solid ${openObj === i ? C.gold + '55' : C.border}`, color: openObj === i ? C.goldLight : C.textMid, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, fontFamily: "'Noto Sans JP'", textAlign: 'left', transition: 'all 0.2s' }}>
+                    <span>🚫 「{obj.trigger}」と言われたら</span>
+                    <span style={{ fontSize: 8 }}>{openObj === i ? '▲' : '▼'}</span>
+                  </button>
+                  {openObj === i && (
+                    <div style={{ background: '#100e06', border: `1px solid ${C.gold}28`, borderTop: 'none', padding: '12px 14px 12px 28px' }}>
+                      <p style={{ fontSize: 13, lineHeight: 2, color: '#d4b870', marginBottom: 10 }}>{obj.response}</p>
+                      {obj.tip && <p style={{ fontSize: 11, color: '#8a7a50', borderTop: `1px solid #2a2010`, paddingTop: 8, lineHeight: 1.8 }}>💡 {obj.tip}</p>}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── RIGHT: ポイント・注意・サムネイル ── */}
+        <div style={{ overflow: 'auto', background: panelBg, display: 'flex', flexDirection: 'column', gap: 0 }}>
+
+          {/* 顧客画面サムネイル */}
+          {sec.photo && (
+            <div style={{ flexShrink: 0 }}>
+              <div style={{ fontSize: 9, color: C.textDim, letterSpacing: '0.12em', padding: '10px 14px 6px' }}>顧客画面の写真</div>
+              <div style={{ position: 'relative', height: 160, overflow: 'hidden', margin: '0 14px', borderRadius: 2, border: `1px solid ${panelBorder}` }}>
+                <img src={`/images/${sec.photo}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top', opacity: .75 }} />
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(0deg,rgba(0,0,0,0.5),transparent)' }} />
+              </div>
+            </div>
+          )}
+
+          {/* キーポイント */}
+          {sec.points && (
+            <div style={{ padding: '12px 14px', borderTop: `1px solid ${panelBorder}`, flexShrink: 0 }}>
+              <div style={{ fontSize: 9, color: C.textDim, letterSpacing: '0.12em', marginBottom: 8 }}>✦ キーポイント</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {sec.points.map((p, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 10px', background: '#14120a', borderLeft: `2px solid ${C.goldDark}` }}>
+                    <span style={{ color: C.goldDark, fontSize: 10, flexShrink: 0, marginTop: 2 }}>▸</span>
+                    <span style={{ fontSize: 11.5, color: '#c8b880', lineHeight: 1.7 }}>{p}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 注意点 */}
+          {sec.watch && (
+            <div style={{ padding: '10px 14px', borderTop: `1px solid ${panelBorder}`, flexShrink: 0 }}>
+              <div style={{ fontSize: 9, color: '#8a4a4a', letterSpacing: '0.12em', marginBottom: 7 }}>⚠ 注意点</div>
+              <div style={{ padding: '9px 12px', background: '#1a0e0e', border: `1px solid #3a2020`, borderLeft: `2px solid #8a4a4a` }}>
+                <p style={{ fontSize: 11.5, color: '#c88080', lineHeight: 1.7 }}>{sec.watch}</p>
+              </div>
+            </div>
+          )}
+
+          {/* 次のセクション予告 */}
+          {nextSec && (
+            <div style={{ padding: '10px 14px', borderTop: `1px solid ${panelBorder}`, marginTop: 'auto', flexShrink: 0 }}>
+              <div style={{ fontSize: 9, color: C.textDim, letterSpacing: '0.12em', marginBottom: 7 }}>次のセクション</div>
+              <div style={{ padding: '8px 12px', background: '#0e0c08', border: `1px solid ${panelBorder}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+                {nextSec.photo && (
+                  <div style={{ width: 36, height: 36, flexShrink: 0, overflow: 'hidden', opacity: .6 }}>
+                    <img src={`/images/${nextSec.photo}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                )}
+                <div>
+                  <p style={{ fontSize: 10, color: C.textDim, marginBottom: 2 }}>{current + 2} / {P_SECTIONS.length}</p>
+                  <p style={{ fontSize: 12, color: C.textMid }}>{nextSec.label}</p>
+                  <p style={{ fontSize: 10, color: C.textDim }}>目安 {nextSec.min}分</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 40px',background:C.surface,borderTop:`1px solid ${C.border}`,flexShrink:0}}>
-        <button onClick={()=>setCurrent(c=>Math.max(c-1,0))} disabled={current===0} style={{padding:'9px 26px',background:'none',border:`1px solid ${current===0?C.border:C.gold+'60'}`,color:current===0?C.textDim:C.goldLight,cursor:current===0?'not-allowed':'pointer',fontSize:12,letterSpacing:'0.08em'}}>← 前へ</button>
-        <div style={{display:'flex',gap:5}}>{P_SECTIONS.map((_,i)=><button key={i} onClick={()=>setCurrent(i)} style={{width:i===current?18:6,height:6,background:i===current?C.gold:C.border,border:'none',cursor:'pointer',padding:0,transition:'all 0.3s',borderRadius:3}}/>)}</div>
-        <button onClick={()=>setCurrent(c=>Math.min(c+1,P_SECTIONS.length-1))} disabled={current===P_SECTIONS.length-1} style={{padding:'9px 26px',background:current===P_SECTIONS.length-1?'none':`linear-gradient(135deg,${C.goldDark},${C.goldLight})`,border:`1px solid ${current===P_SECTIONS.length-1?C.border:'transparent'}`,color:current===P_SECTIONS.length-1?C.textDim:C.charcoal,cursor:current===P_SECTIONS.length-1?'not-allowed':'pointer',fontSize:12,letterSpacing:'0.08em'}}>次へ →</button>
+
+      {/* ── BOTTOM NAV ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px', background: '#0a0908', borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
+        <button onClick={() => setCurrent(c => Math.max(c - 1, 0))} disabled={current === 0} style={{ padding: '8px 22px', background: 'none', border: `1px solid ${current === 0 ? C.border : C.gold + '60'}`, color: current === 0 ? C.textDim : C.goldLight, cursor: current === 0 ? 'not-allowed' : 'pointer', fontSize: 11, letterSpacing: '0.08em' }}>← 前へ</button>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          {P_SECTIONS.map((_, i) => (
+            <button key={i} onClick={() => setCurrent(i)} style={{ width: i === current ? 16 : 5, height: 5, background: i === current ? C.gold : i < current ? '#3a5a3a' : C.border, border: 'none', cursor: 'pointer', padding: 0, transition: 'all 0.3s', borderRadius: 3 }} />
+          ))}
+        </div>
+        <button onClick={() => setCurrent(c => Math.min(c + 1, P_SECTIONS.length - 1))} disabled={current === P_SECTIONS.length - 1} style={{ padding: '8px 22px', background: current === P_SECTIONS.length - 1 ? 'none' : `linear-gradient(135deg,${C.goldDark},${C.goldLight})`, border: `1px solid ${current === P_SECTIONS.length - 1 ? C.border : 'transparent'}`, color: current === P_SECTIONS.length - 1 ? C.textDim : C.charcoal, cursor: current === P_SECTIONS.length - 1 ? 'not-allowed' : 'pointer', fontSize: 11, letterSpacing: '0.08em' }}>次へ →</button>
       </div>
     </div>
   )
