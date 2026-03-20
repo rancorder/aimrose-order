@@ -6,6 +6,17 @@ function getRoute() {
   return window.location.pathname === '/presenter' ? 'presenter' : 'customer'
 }
 
+// ── MOBILE HOOK ───────────────────────────────────────────────────────────────
+function useIsMobile() {
+  const [mob, setMob] = useState(() => window.innerWidth < 768)
+  useEffect(() => {
+    const h = () => setMob(window.innerWidth < 768)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [])
+  return mob
+}
+
 // ── BROADCAST CHANNEL ─────────────────────────────────────────────────────────
 const CHANNEL = 'aimrose-slide-sync'
 function useSyncSend() {
@@ -21,6 +32,34 @@ const CUSTOMER_MAP = { intro:'intro', background:'background', strength:'strengt
 
 // ── COLORS ────────────────────────────────────────────────────────────────────
 const C = { ivory:'#f5f0e8', cream:'#ede7d9', warmWhite:'#faf7f2', charcoal:'#1a1612', gold:'#b8924a', goldLight:'#d4aa6a', goldDark:'#8a6830', muted:'#7a7068', slate:'#4a4540', bg:'#0d0c0a', surface:'#181614', border:'#2a2520', textDim:'#6a6058', textMid:'#a09080', textLight:'#e8ddd0' }
+
+// ── RESPONSIVE HELPERS ────────────────────────────────────────────────────────
+const rp = (mob, d, m) => mob ? m : d   // responsive pick: desktop vs mobile
+const pad = (mob) => mob ? '52px 20px' : '100px 80px'
+const padSm = (mob) => mob ? '40px 20px' : '80px 56px'
+
+// ── GLOBAL STYLES (injected once) ─────────────────────────────────────────────
+function GlobalStyles() {
+  return (
+    <style>{`
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+      body { overflow-x: hidden; }
+      ::-webkit-scrollbar { width: 4px; }
+      ::-webkit-scrollbar-track { background: #0d0c0a; }
+      ::-webkit-scrollbar-thumb { background: #2a2520; border-radius: 2px; }
+      .fi { opacity: 0; transform: translateY(40px); transition: opacity 0.8s ease, transform 0.8s ease; }
+      .fi.visible { opacity: 1 !important; transform: translateY(0) !important; }
+      @media (max-width: 767px) {
+        .hide-mobile { display: none !important; }
+        .three-scene { height: 260px !important; min-height: 260px !important; position: relative !important; }
+      }
+      @media (min-width: 768px) {
+        .hide-desktop { display: none !important; }
+      }
+    `}</style>
+  )
+}
 
 // ── THREE.JS HOOK ─────────────────────────────────────────────────────────────
 function useThreeScene(initFn) {
@@ -43,7 +82,7 @@ function useThreeScene(initFn) {
   return mountRef
 }
 
-// ── HERO PARTICLES (lightweight, layered over photo) ──────────────────────────
+// ── HERO PARTICLES ────────────────────────────────────────────────────────────
 function HeroParticles() {
   const ref = useThreeScene((canvas, W, H, setId) => {
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true })
@@ -52,15 +91,12 @@ function HeroParticles() {
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(60, W / H, 0.1, 200)
     camera.position.set(0, 0, 13)
-
-    // Torus rings
     const rings = [[4.4,.016,Math.PI/2,0,0],[5.2,.011,Math.PI/3,Math.PI/4,.2],[3.8,.014,.1,Math.PI/5,Math.PI/6],[6.,.009,Math.PI/7,Math.PI/3,Math.PI/5]].map(([r,tube,rx,ry,rz]) => {
       const m = new THREE.Mesh(new THREE.TorusGeometry(r,tube,8,120), new THREE.MeshBasicMaterial({ color:0xd4aa6a, transparent:true, opacity:.22 }))
       m.rotation.set(rx,ry,rz); scene.add(m); return m
     })
-
-    // Particles
-    const N=2500, pos=new Float32Array(N*3), col=new Float32Array(N*3)
+    const N = W < 600 ? 1200 : 2500  // モバイルは粒子を減らす
+    const pos=new Float32Array(N*3), col=new Float32Array(N*3)
     const ca=new THREE.Color(0xd4aa6a), cb=new THREE.Color(0xffffff)
     for(let i=0;i<N;i++){
       const r=6+Math.random()*10, th=Math.random()*Math.PI*2, ph=Math.acos(2*Math.random()-1)
@@ -72,7 +108,6 @@ function HeroParticles() {
     pg.setAttribute('position',new THREE.BufferAttribute(pos,3))
     pg.setAttribute('color',new THREE.BufferAttribute(col,3))
     scene.add(new THREE.Points(pg,new THREE.PointsMaterial({ size:.05, vertexColors:true, transparent:true, opacity:.6 })))
-
     const mouse={x:0,y:0}
     const onMouse=e=>{mouse.x=(e.clientX/window.innerWidth-.5)*2; mouse.y=-(e.clientY/window.innerHeight-.5)*2}
     window.addEventListener('mousemove',onMouse)
@@ -91,7 +126,6 @@ function HeroParticles() {
   return <div ref={ref} style={{ position:'absolute', inset:0 }} />
 }
 
-// ── SPOOL SCENE ───────────────────────────────────────────────────────────────
 function SpoolScene() {
   const ref = useThreeScene((canvas, W, H, setId) => {
     const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true })
@@ -100,20 +134,21 @@ function SpoolScene() {
     camera.position.set(0,2,11); camera.lookAt(0,0,0)
     scene.add(new THREE.AmbientLight(0x332a20,2.5))
     const pl1=new THREE.PointLight(0xd4aa6a,8,25); pl1.position.set(3,5,5); scene.add(pl1)
-    scene.add(Object.assign(new THREE.PointLight(0xc4857a,4,18),{position:{x:-4,y:-2,z:3}}))
+    const pl2=new THREE.PointLight(0xc4857a,4,18); pl2.position.set(-4,-2,3); scene.add(pl2)
     const colors=[0xb8924a,0xd4aa6a,0xc4857a,0x8a6830,0xe8d0a0,0xa07840]
     const spools=[]
-    for(let i=0;i<6;i++){
+    const count = W < 600 ? 4 : 6  // モバイルは少なく
+    for(let i=0;i<count;i++){
       const grp=new THREE.Group()
       grp.add(new THREE.Mesh(new THREE.CylinderGeometry(.4,.4,.72,32),new THREE.MeshStandardMaterial({color:colors[i%colors.length],metalness:.3,roughness:.65})))
       for(const y of[-.4,.4]){const fl=new THREE.Mesh(new THREE.CylinderGeometry(.56,.56,.09,32),new THREE.MeshStandardMaterial({color:0x7a5820,metalness:.6,roughness:.4}));fl.position.y=y;grp.add(fl)}
       for(let j=0;j<7;j++){const t=new THREE.Mesh(new THREE.TorusGeometry(.42,.018,8,32),new THREE.MeshStandardMaterial({color:colors[i%colors.length],metalness:.1,roughness:.9}));t.rotation.x=Math.PI/2;t.position.y=-.27+j*.09;grp.add(t)}
-      const angle=(i/6)*Math.PI*2, r=3+(i%2)*.7
+      const angle=(i/count)*Math.PI*2, r=3+(i%2)*.7
       grp.position.set(Math.cos(angle)*r,(Math.random()-.5)*1.6,Math.sin(angle)*r*.5)
       grp.rotation.z=(Math.random()-.5)*.5; scene.add(grp)
       spools.push({grp,angle,r,phase:Math.random()*Math.PI*2,spd:.004+Math.random()*.003})
     }
-    for(let i=0;i<8;i++){
+    for(let i=0;i<6;i++){
       const pts=Array.from({length:8},()=>new THREE.Vector3((Math.random()-.5)*13,(Math.random()-.5)*6,(Math.random()-.5)*4))
       scene.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),50,.009,4,false),new THREE.MeshBasicMaterial({color:0xd4aa6a,transparent:true,opacity:.18})))
     }
@@ -132,7 +167,6 @@ function SpoolScene() {
   return <div ref={ref} style={{ position:'absolute', inset:0 }} />
 }
 
-// ── FABRIC WAVE ───────────────────────────────────────────────────────────────
 function FabricScene({ dark=false }) {
   const ref = useThreeScene((canvas, W, H, setId) => {
     const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true})
@@ -141,12 +175,12 @@ function FabricScene({ dark=false }) {
     camera.position.set(0,4,9); camera.lookAt(0,0,0)
     scene.add(new THREE.AmbientLight(0x332a20,dark?1.8:3))
     const pl=new THREE.PointLight(0xd4aa6a,5,18); pl.position.set(2,4,5); scene.add(pl)
-    const SEG=44
+    const SEG = W < 600 ? 28 : 44  // モバイルはセグメント数を減らす
     const geo1=new THREE.PlaneGeometry(13,13,SEG,SEG), geo2=new THREE.PlaneGeometry(13,13,SEG,SEG)
     scene.add(new THREE.Mesh(geo1,new THREE.MeshStandardMaterial({color:dark?0x1a1612:0xf0ebe0,wireframe:true,transparent:true,opacity:dark?.22:.32})))
     scene.add(new THREE.Mesh(geo2,new THREE.MeshBasicMaterial({color:0xb8924a,wireframe:true,transparent:true,opacity:dark?.07:.05})))
     const src=Float32Array.from(geo1.attributes.position.array), vCount=(SEG+1)*(SEG+1)
-    for(let i=0;i<14;i++){
+    for(let i=0;i<8;i++){
       const pin=new THREE.Group()
       pin.add(new THREE.Mesh(new THREE.CylinderGeometry(.014,.005,.65,6),new THREE.MeshStandardMaterial({color:0xd4aa6a,metalness:.95,roughness:.05})))
       const head=new THREE.Mesh(new THREE.SphereGeometry(.04,12,12),new THREE.MeshStandardMaterial({color:0xd4aa6a,metalness:.8,roughness:.2}))
@@ -167,7 +201,6 @@ function FabricScene({ dark=false }) {
   return <div ref={ref} style={{ position:'absolute', inset:0 }} />
 }
 
-// ── GEM SCENE ─────────────────────────────────────────────────────────────────
 function GemScene() {
   const ref = useThreeScene((canvas, W, H, setId) => {
     const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true})
@@ -176,9 +209,10 @@ function GemScene() {
     camera.position.set(0,0,11)
     scene.add(new THREE.AmbientLight(0x332a20,2.5))
     const pl1=new THREE.PointLight(0xd4aa6a,10,22); pl1.position.set(4,4,4); scene.add(pl1)
-    scene.add(Object.assign(new THREE.PointLight(0xc4857a,5,18),{position:{x:-4,y:-3,z:3}}))
+    const pl2=new THREE.PointLight(0xc4857a,5,18); pl2.position.set(-4,-3,3); scene.add(pl2)
     const gC=[0xb8924a,0xd4aa6a,0xc4857a,0xe8d0a0,0x8a6830,0xd4b896]
-    const gems=Array.from({length:14},(_,i)=>{
+    const count = W < 600 ? 8 : 14
+    const gems=Array.from({length:count},(_,i)=>{
       const mesh=new THREE.Mesh(new THREE.OctahedronGeometry(.2+Math.random()*.6,0),new THREE.MeshStandardMaterial({color:gC[i%gC.length],metalness:.85,roughness:.1,emissive:0xb8924a,emissiveIntensity:.1,transparent:true,opacity:.82}))
       mesh.position.set((Math.random()-.5)*13,(Math.random()-.5)*9,(Math.random()-.5)*5); mesh.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,0); scene.add(mesh)
       return {mesh,phase:Math.random()*Math.PI*2,spd:.4+Math.random()*.9,oy:mesh.position.y}
@@ -196,14 +230,14 @@ function GemScene() {
   return <div ref={ref} style={{ position:'absolute', inset:0 }} />
 }
 
-// ── ROSE PARTICLES ────────────────────────────────────────────────────────────
 function RoseScene() {
   const ref = useThreeScene((canvas, W, H, setId) => {
     const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true})
     renderer.setPixelRatio(Math.min(window.devicePixelRatio,2)); renderer.setSize(W,H)
     const scene=new THREE.Scene(), camera=new THREE.PerspectiveCamera(55,W/H,.1,100)
     camera.position.set(0,0,11)
-    const N=5000, pos=new Float32Array(N*3), col=new Float32Array(N*3)
+    const N = W < 600 ? 2500 : 5000
+    const pos=new Float32Array(N*3), col=new Float32Array(N*3)
     const c1=new THREE.Color(0xd4aa6a), c2=new THREE.Color(0xc4857a), c3=new THREE.Color(0xb8924a)
     for(let i=0;i<N;i++){
       const theta=(i/N)*Math.PI*22, r=4*Math.cos(3*theta)+(Math.random()-.5)*.85
@@ -229,26 +263,8 @@ function RoseScene() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// PHOTO PLACEMENT STRATEGY (my curatorial choices):
-//
-// img-002  Male runway model       → HERO background: 圧倒的な第一印象
-// img-083  Sewing machine (sepia)  → STRENGTH bg: 職人の技術を象徴
-// img-014  Tailor + client         → BACKGROUND: 三方よしの「対話」を体現
-// img-057  Hooded dark cloak       → STRENGTH gallery: 「特殊案件対応可」
-// img-059  Maid costume            → STRENGTH gallery: 「舞台衣装まで」
-// img-060  Gray suit Paris         → SERVICE: 品質の到達点を示す
-// img-024  Checkered dress sample  → METHOD1: サンプル実物展示
-// img-025  Green trench sample     → METHOD1: サンプル実物展示
-// img-028  Navy coat (worn)        → METHOD2: 完成品着用イメージ
-// img-029  Pink suit (worn)        → METHOD2: 完成品着用イメージ
-// img-044  Red plaid dress         → PRICING: 高品質の証
-// img-071  Pocket square           → WHOLESALE: 卸商品のメイン
-// img-033  Cream blouse            → WHOLESALE: 卸商品
-// img-043  Culottes outfit         → WHOLESALE: 卸商品
-// img-054  Executive with mic      → STEPS: 提携先のターゲット像
+// PRESENTER DATA
 // ════════════════════════════════════════════════════════════════════════════
-
-// ── PRESENTER DATA ─────────────────────────────────────────────────────────────
 const BANT_ITEMS = [
   {id:'budget',    label:'予算感はどれくらいか？（外注1件あたりの想定）'},
   {id:'authority', label:'最終判断は誰が担当か？（目の前の方か、別に決裁者がいるか）'},
@@ -256,330 +272,82 @@ const BANT_ITEMS = [
   {id:'timeline',  label:'いつ頃から使い始めたいか？（すぐ/3か月以内/半年以上）'},
 ]
 const OBJECTIONS = [
-  {
-    trigger: '検討したい',
-    response: 'ありがとうございます。ご判断には仕様・納期の詳細が必要かと思いますが、それは技術者との打ち合わせでないと正確にお伝えできない部分が多いです。30分ほどのお時間をいただければ、御社の案件に当てはめた具体的な進め方をご提示できますので、まず次回のお時間だけいただければと思います。',
-    tip: '「いつが都合よいか」まで確認しておく。週内を目安に提案する。',
-  },
-  {
-    trigger: '見送りたい',
-    response: '率直にお話しいただきありがとうございます。ただ、外注先としてお役に立てるかどうかは、詳細を確認してみないと判断が難しい部分があります。情報整理の場として、次回30分ほどお時間をいただければ、御社にとってメリットがあるかどうかを一緒に確認させてください。',
-    tip: '「見送り」の理由を一つ聞き出す。理由がわかれば解決策を提示できる。',
-  },
-  {
-    trigger: '会社に確認が必要',
-    response: '承知いたしました。慎重に進められるのは良いことだと思います。ご確認の際の判断材料として、仕様・納期・費用感の詳細は二次商談で具体的にお伝えできます。次回は御社の体制に合わせた事例もご用意いたしますので、30分ほどお時間をいただければと思います。',
-    tip: '「いつ頃確認が取れそうか」を確認し、フォローの連絡日程を決める。',
-  },
+  { trigger:'検討したい', response:'ありがとうございます。ご判断には仕様・納期の詳細が必要かと思いますが、それは技術者との打ち合わせでないと正確にお伝えできない部分が多いです。30分ほどのお時間をいただければ、御社の案件に当てはめた具体的な進め方をご提示できますので、まず次回のお時間だけいただければと思います。', tip:'「いつが都合よいか」まで確認しておく。週内を目安に提案する。' },
+  { trigger:'見送りたい', response:'率直にお話しいただきありがとうございます。ただ、外注先としてお役に立てるかどうかは、詳細を確認してみないと判断が難しい部分があります。情報整理の場として、次回30分ほどお時間をいただければ、御社にとってメリットがあるかどうかを一緒に確認させてください。', tip:'「見送り」の理由を一つ聞き出す。理由がわかれば解決策を提示できる。' },
+  { trigger:'会社に確認が必要', response:'承知いたしました。慎重に進められるのは良いことだと思います。ご確認の際の判断材料として、仕様・納期・費用感の詳細は二次商談で具体的にお伝えできます。次回は御社の体制に合わせた事例もご用意いたしますので、30分ほどお時間をいただければと思います。', tip:'「いつ頃確認が取れそうか」を確認し、フォローの連絡日程を決める。' },
 ]
-
-// セクション定義（台本＋プレゼンターノート）
 const P_SECTIONS = [
-  {
-    id: 'intro', label: 'イントロ', cs: 'intro', min: 1,
-    goal: '第一印象でプロフェッショナルな雰囲気をつくる。相手に「聞いてみよう」と思わせる。',
-    photo: 'img-002.jpg',
-    script: `本日はお時間をいただきありがとうございます。
-株式会社aim roseの〇〇と申します。
-
-本日は、御社で対応が難しいフルオーダー案件や特殊案件を、弊社が外注先としてお手伝いできる可能性についてお話しできればと思っております。
-
-御社の既存のお客様により良いご提案ができるようになる点や、機会損失を防ぐ点など、メリットを感じていただける内容になっているかと思います。ぜひ気軽にお聞きいただければ幸いです。
-
-どうぞよろしくお願いいたします。`,
-    points: [
-      '話すテンポをゆっくり目に。焦らない。',
-      '「機会損失」という言葉を意識的に強調する。',
-      '最初から売り込まない。「可能性について話す」というスタンスを保つ。',
-    ],
+  { id:'intro', label:'イントロ', cs:'intro', min:1, photo:'img-002.jpg',
+    goal:'第一印象でプロフェッショナルな雰囲気をつくる。相手に「聞いてみよう」と思わせる。',
+    script:`本日はお時間をいただきありがとうございます。\n株式会社aim roseの〇〇と申します。\n\n本日は、御社で対応が難しいフルオーダー案件や特殊案件を、弊社が外注先としてお手伝いできる可能性についてお話しできればと思っております。\n\n御社の既存のお客様により良いご提案ができるようになる点や、機会損失を防ぐ点など、メリットを感じていただける内容になっているかと思います。ぜひ気軽にお聞きいただければ幸いです。\n\nどうぞよろしくお願いいたします。`,
+    points:['話すテンポをゆっくり目に。焦らない。','「機会損失」という言葉を意識的に強調する。','最初から売り込まない。「可能性について話す」というスタンスを保つ。'],
   },
-  {
-    id: 'icebreak', label: 'アイスブレイク', cs: null, min: 3,
-    goal: '先方の興味の理由・現状の課題を聞き出し、商談の方向性を把握する。',
-    photo: null,
-    script: `●●様、最初に1点お伺いしてもよろしいでしょうか？
-先日は突然のお電話にも関わらずご興味をいただけた理由を、先にお聞かせいただけますか？
-
-（相手の回答をしっかり聞く）
-
-ありがとうございます。〇〇という背景からご興味をお持ちいただいたんですね。
-
-もしよろしければ、現在どのような案件でお困りの場面が多いのか、もう少し聞かせていただけますか？
-たとえば特殊体型のお客様の対応が難しいケース、素材の制約でお断りしているケースなど、日常的に困りやすいポイントはどのあたりでしょうか？
-
-（回答をメモしながら傾聴。「なるほど」「それは大変ですね」で共感を示す）
-
-ありがとうございます。そういった状況があるんですね。
-実はその点で、弊社がお力になれる可能性が高いんです。`,
-    points: [
-      '相手が話している間は絶対に遮らない。メモを取りながら聞く。',
-      '回答の中のキーワードを後半の提案で必ず使う（「先ほど〇〇とおっしゃっていた点ですが…」）。',
-      '困りごとが出たら「それは具体的にどれくらいの頻度で？」と深掘りする。',
-    ],
-    watch: '相手が話し好きなら時間を使いすぎないよう注意。3分以内を目安に。',
+  { id:'icebreak', label:'アイスブレイク', cs:null, min:3, photo:null,
+    goal:'先方の興味の理由・現状の課題を聞き出し、商談の方向性を把握する。',
+    script:`●●様、最初に1点お伺いしてもよろしいでしょうか？\n先日は突然のお電話にも関わらずご興味をいただけた理由を、先にお聞かせいただけますか？\n\n（相手の回答をしっかり聞く）\n\nありがとうございます。〇〇という背景からご興味をお持ちいただいたんですね。\n\nもしよろしければ、現在どのような案件でお困りの場面が多いのか、もう少し聞かせていただけますか？\nたとえば特殊体型のお客様の対応が難しいケース、素材の制約でお断りしているケースなど、日常的に困りやすいポイントはどのあたりでしょうか？\n\n（回答をメモしながら傾聴）\n\nありがとうございます。そういった状況があるんですね。\n実はその点で、弊社がお力になれる可能性が高いんです。`,
+    points:['相手が話している間は絶対に遮らない。メモを取りながら聞く。','回答の中のキーワードを後半の提案で必ず使う。','困りごとが出たら「それは具体的にどれくらいの頻度で？」と深掘りする。'],
+    watch:'相手が話し好きなら時間を使いすぎないよう注意。3分以内を目安に。',
   },
-  {
-    id: 'background', label: '提携の背景', cs: 'background', min: 2,
-    goal: '「全員が得をする提携」というフレームを印象づける。一方的な売り込みではないと示す。',
-    photo: 'img-014.jpg',
-    script: `弊社がご提案する提携は、三方よしの構造になっています。
-
-まず御社のメリットとして、フルオーダー対応で受注機会が広がり、これまでお断りしていたお客様からの注文も取れるようになります。機会損失が減ります。
-
-次にお客様のメリットとして、より幅広い選択肢と高品質な製品をご提供できることで、満足度がアップしリピートにつながります。
-
-そして弊社にとっても、長年培ってきた技術と経験を最大限に活用できます。
-
-つまり誰かが損をする関係ではなく、三者全員にメリットのある提携です。`,
-    points: [
-      '「三方よし」の言葉は日本人に響く。ゆっくり丁寧に説明する。',
-      '御社のメリットを一番最初・一番詳しく話す。相手の関心はそこだけ。',
-      '弊社のメリットはサラッと最後に言う程度でOK。',
-    ],
+  { id:'background', label:'提携の背景', cs:'background', min:2, photo:'img-014.jpg',
+    goal:'「全員が得をする提携」というフレームを印象づける。一方的な売り込みではないと示す。',
+    script:`弊社がご提案する提携は、三方よしの構造になっています。\n\nまず御社のメリットとして、フルオーダー対応で受注機会が広がり、これまでお断りしていたお客様からの注文も取れるようになります。機会損失が減ります。\n\n次にお客様のメリットとして、より幅広い選択肢と高品質な製品をご提供できることで、満足度がアップしリピートにつながります。\n\nそして弊社にとっても、長年培ってきた技術と経験を最大限に活用できます。\n\nつまり誰かが損をする関係ではなく、三者全員にメリットのある提携です。`,
+    points:['「三方よし」の言葉は日本人に響く。ゆっくり丁寧に説明する。','御社のメリットを一番最初・一番詳しく話す。','弊社のメリットはサラッと最後に言う程度でOK。'],
   },
-  {
-    id: 'strength', label: '弊社の強み', cs: 'strength', min: 3,
-    goal: '「この会社は本物だ」という信頼感を積み上げる。実績の具体性が鍵。',
-    photo: 'img-083.jpg',
-    script: `弊社には3つの大きな強みがあります。
-
-まず①職人の技術。
-ジバンシー、コムデギャルソンなど、ハイブランドを担う縫製工場で修得した技術を持っています。20年以上の実績で、多ジャンル・フルアイテムの製作をしてきました。
-
-次に②総合的な製作能力。
-デザイン、パターン、企画、縫製—すべてのプロセスを経験しています。フルオーダーを一気通貫で進められるのが弊社の強みです。
-
-そして③過去の実績として、
-小澤征爾指揮による演劇舞台の衣装製作、森英恵デザイナーのサンプル製作、東京・関西コレクション出店ブランドの衣装、宝塚歌劇団番組での製作指導など、幅広い分野で実績があります。
-
-一般のスーツ店様ではお断りになるような特殊な案件も、弊社では得意としております。`,
-    points: [
-      '固有名詞（小澤征爾、宝塚、コレクション）を明確に発音する。ここが信頼の核心。',
-      '「普通のスーツ店では難しい案件」という言い方で、御社との差別化を自然に行う。',
-      'スクリーンの実績ギャラリー写真を指しながら「こういった作品も手がけています」と補足できると効果的。',
-    ],
-    watch: '実績の羅列になりすぎないよう注意。1〜2個絞って深く語る方が効果的な場合もある。',
+  { id:'strength', label:'弊社の強み', cs:'strength', min:3, photo:'img-083.jpg',
+    goal:'「この会社は本物だ」という信頼感を積み上げる。実績の具体性が鍵。',
+    script:`弊社には3つの大きな強みがあります。\n\nまず①職人の技術。\nジバンシー、コムデギャルソンなど、ハイブランドを担う縫製工場で修得した技術を持っています。20年以上の実績で、多ジャンル・フルアイテムの製作をしてきました。\n\n次に②総合的な製作能力。\nデザイン、パターン、企画、縫製—すべてのプロセスを経験しています。フルオーダーを一気通貫で進められるのが弊社の強みです。\n\nそして③過去の実績として、\n小澤征爾指揮による演劇舞台の衣装製作、森英恵デザイナーのサンプル製作、東京・関西コレクション出店ブランドの衣装、宝塚歌劇団番組での製作指導など、幅広い分野で実績があります。\n\n一般のスーツ店様ではお断りになるような特殊な案件も、弊社では得意としております。`,
+    points:['固有名詞（小澤征爾、宝塚、コレクション）を明確に発音する。ここが信頼の核心。','「普通のスーツ店では難しい案件」という言い方で、御社との差別化を自然に行う。','スクリーンの実績ギャラリー写真を指しながら「こういった作品も手がけています」と補足できると効果的。'],
+    watch:'実績の羅列になりすぎないよう注意。1〜2個絞って深く語る方が効果的な場合もある。',
   },
-  {
-    id: 'service', label: 'サービス内容', cs: 'service', min: 2,
-    goal: '2つの提携方法の存在を認識させ、「どちらが自社に合うか」を考えてもらう。',
-    photo: 'img-060.jpg',
-    script: `外注としてご依頼いただく流れはシンプルです。
-まず案件内容をヒアリングし、仕様・素材・納期などを確認したうえで制作に入ります。
-
-提携の方法は大きく2種類あります。
-
-一つ目は「非対面式受注」。
-弊社で制作したフリーサイズのサンプルを御社の店頭やHPに展示していただき、丈の調整だけで受注できる方法です。手軽に始めやすいのが特徴です。
-
-二つ目は「対面式受注」。
-お客様がフルオーダーをご希望の場合に、弊社が御社に出張して、共同で受注する方法です。完全オーダーメイドに対応できます。
-
-どちらの方法が御社の状況に合っているか、後ほどご確認いただければと思います。`,
-    points: [
-      '「どちらが合いそうですか？」と一言聞いてみると相手の関心が見える。',
-      '手軽さを売りにしたいなら方法①、高付加価値を売りにしたいなら方法②を強調。',
-      'アイスブレイクで聞いた課題に合わせて、どちらの方法が刺さるかをイメージしながら話す。',
-    ],
+  { id:'service', label:'サービス内容', cs:'service', min:2, photo:'img-060.jpg',
+    goal:'2つの提携方法の存在を認識させ、「どちらが自社に合うか」を考えてもらう。',
+    script:`外注としてご依頼いただく流れはシンプルです。\nまず案件内容をヒアリングし、仕様・素材・納期などを確認したうえで制作に入ります。\n\n提携の方法は大きく2種類あります。\n\n一つ目は「非対面式受注」。\n弊社で制作したフリーサイズのサンプルを御社の店頭やHPに展示していただき、丈の調整だけで受注できる方法です。手軽に始めやすいのが特徴です。\n\n二つ目は「対面式受注」。\nお客様がフルオーダーをご希望の場合に、弊社が御社に出張して、共同で受注する方法です。完全オーダーメイドに対応できます。\n\nどちらの方法が御社の状況に合っているか、後ほどご確認いただければと思います。`,
+    points:['「どちらが合いそうですか？」と一言聞いてみると相手の関心が見える。','手軽さを売りにしたいなら方法①、高付加価値を売りにしたいなら方法②を強調。','アイスブレイクで聞いた課題に合わせて、どちらが刺さるかをイメージしながら話す。'],
   },
-  {
-    id: 'method1', label: '提携方法①', cs: 'method1', min: 3,
-    goal: '「すぐに始められる」「リスクが低い」という安心感を伝える。',
-    photo: 'img-024.jpg',
-    script: `提携方法①は、フリーサイズのサンプルを使った非対面式の受注です。
-
-流れを説明しますと、まず弊社がS〜L対応のデザインサンプルを制作します。これを御社の店内またはHPに展示していただきます。
-
-お客様からご注文が入ったら、丈の調整だけで受注できる仕組みです。パターンや仕様の知識は不要です。
-
-受注後は弊社に発注いただき、資材調達から製作まで全て弊社が担当します。
-
-料金は税別で、コートやスーツが通常¥100,000、サンプル特別価格は¥50,000からご提供しています。納期は材料が揃ってから1ヶ月半〜2ヶ月が目安です。
-
-販売価格は御社で自由に設定いただけます。`,
-    points: [
-      '「丈だけの調整で受注できる」という簡便さを強調する。難しくないことを伝える。',
-      '「サンプル特別価格」という言い方をする。まず試してもらうことがゴール。',
-      'スクリーンのサンプル写真（チェック柄ドレス、グリーントレンチ）を指して「こういった商品です」と具体的に示す。',
-    ],
-    watch: '「生地はご準備ください」という条件を必ず伝える。後でトラブルになりやすい。',
+  { id:'method1', label:'提携方法①', cs:'method1', min:3, photo:'img-024.jpg',
+    goal:'「すぐに始められる」「リスクが低い」という安心感を伝える。',
+    script:`提携方法①は、フリーサイズのサンプルを使った非対面式の受注です。\n\n流れを説明しますと、まず弊社がS〜L対応のデザインサンプルを制作します。これを御社の店内またはHPに展示していただきます。\n\nお客様からご注文が入ったら、丈の調整だけで受注できる仕組みです。パターンや仕様の知識は不要です。\n\n受注後は弊社に発注いただき、資材調達から製作まで全て弊社が担当します。\n\n料金は税別で、コートやスーツが通常¥100,000、サンプル特別価格は¥50,000からご提供しています。納期は材料が揃ってから1ヶ月半〜2ヶ月が目安です。\n\n販売価格は御社で自由に設定いただけます。`,
+    points:['「丈だけの調整で受注できる」という簡便さを強調する。難しくないことを伝える。','「サンプル特別価格」という言い方をする。まず試してもらうことがゴール。','スクリーンのサンプル写真を指して「こういった商品です」と具体的に示す。'],
+    watch:'「生地はご準備ください」という条件を必ず伝える。後でトラブルになりやすい。',
   },
-  {
-    id: 'method2', label: '提携方法②', cs: 'method2', min: 3,
-    goal: '「本格的なフルオーダーを御社ブランドで提供できる」という付加価値を訴求する。',
-    photo: 'img-028.jpg',
-    script: `提携方法②は、完全なフルオーダーの対面式受注です。
-
-お客様からフルオーダーのご依頼があった際に、弊社に連絡をいただきます。日程を調整してから弊社が御社へ出張し、一緒にご注文を受けます。
-
-その後、仮縫いを1〜2回行い、体型に合わせた細かな調整を経て、弊社で全て製作します。
-
-納期は2〜3ヶ月が目安です。仮縫いのタイミングにより前後します。
-
-出張費は距離に応じてかかりますが、20km以内なら交通費別途¥10,000です。受注日と仮縫い日の合計2〜3回分が含まれています。
-
-ご紹介いただいたお客様が弊社でリピートされた場合は、以後のオーダーのたびに御社へ20%をキャッシュバックいたします。`,
-    points: [
-      '「御社のブランドで提供できる」という言い方をする。弊社名は前面に出さないスタンス。',
-      '「20%キャッシュバック」は必ずゆっくり、はっきり言う。ここで目が変わることが多い。',
-      'スクリーンの着用写真を見せながら「この品質のものが御社のお客様に提供できます」と伝える。',
-    ],
-    watch: '出張費の説明を省かない。費用感をぼかすと後で不信感につながる。',
+  { id:'method2', label:'提携方法②', cs:'method2', min:3, photo:'img-028.jpg',
+    goal:'「本格的なフルオーダーを御社ブランドで提供できる」という付加価値を訴求する。',
+    script:`提携方法②は、完全なフルオーダーの対面式受注です。\n\nお客様からフルオーダーのご依頼があった際に、弊社に連絡をいただきます。日程を調整してから弊社が御社へ出張し、一緒にご注文を受けます。\n\nその後、仮縫いを1〜2回行い、体型に合わせた細かな調整を経て、弊社で全て製作します。\n\n納期は2〜3ヶ月が目安です。仮縫いのタイミングにより前後します。\n\n出張費は距離に応じてかかりますが、20km以内なら交通費別途¥10,000です。受注日と仮縫い日の合計2〜3回分が含まれています。\n\nご紹介いただいたお客様が弊社でリピートされた場合は、以後のオーダーのたびに御社へ20%をキャッシュバックいたします。`,
+    points:['「御社のブランドで提供できる」という言い方をする。弊社名は前面に出さないスタンス。','「20%キャッシュバック」は必ずゆっくり、はっきり言う。ここで目が変わることが多い。','スクリーンの着用写真を見せながら「この品質のものが御社のお客様に提供できます」と伝える。'],
+    watch:'出張費の説明を省かない。費用感をぼかすと後で不信感につながる。',
   },
-  {
-    id: 'pricing', label: '料金表', cs: 'pricing', min: 2,
-    goal: '価格の透明性を示し、「思ったより理解しやすい」という安心感を持ってもらう。',
-    photo: 'img-044.jpg',
-    script: `フルオーダーの料金体系をご説明します。
-
-料金は「パターン代」と「製作代」に分かれています。
-
-コートはパターン¥55,000〜、製作¥90,000〜。ジャケットはパターン¥50,000〜、製作¥70,000〜。ワンピースはパターン¥45,000〜、製作¥60,000〜です。
-
-重要なポイントとして、同じパターンを2着目以降に使う場合はパターン代が不要になります。
-
-また革素材は別途¥20,000、チェックや柄合わせは¥10,000のオプションとなります。
-
-販売価格は御社で自由に設定いただけますので、利益率は御社のご判断で設定できます。`,
-    points: [
-      '「パターン代不要（2着目〜）」は強いメリット。複数受注が見込める場合は特に強調。',
-      '「販売価格は御社で自由設定」という言葉で、マージンを取れることを印象づける。',
-      '高すぎると感じる表情があれば「お客様への販売価格は自由ですので、例えば…」と続ける。',
-    ],
-    watch: '価格だけの話になりすぎると安売り競争に見える。「品質と価格のバランス」という文脈を保つ。',
+  { id:'pricing', label:'料金表', cs:'pricing', min:2, photo:'img-044.jpg',
+    goal:'価格の透明性を示し、「思ったより理解しやすい」という安心感を持ってもらう。',
+    script:`フルオーダーの料金体系をご説明します。\n\n料金は「パターン代」と「製作代」に分かれています。\n\nコートはパターン¥55,000〜、製作¥90,000〜。ジャケットはパターン¥50,000〜、製作¥70,000〜。ワンピースはパターン¥45,000〜、製作¥60,000〜です。\n\n重要なポイントとして、同じパターンを2着目以降に使う場合はパターン代が不要になります。\n\nまた革素材は別途¥20,000、チェックや柄合わせは¥10,000のオプションとなります。\n\n販売価格は御社で自由に設定いただけますので、利益率は御社のご判断で設定できます。`,
+    points:['「パターン代不要（2着目〜）」は強いメリット。複数受注が見込める場合は特に強調。','「販売価格は御社で自由設定」という言葉で、マージンを取れることを印象づける。','高すぎると感じる表情があれば「お客様への販売価格は自由ですので、例えば…」と続ける。'],
+    watch:'価格だけの話になりすぎると安売り競争に見える。「品質と価格のバランス」という文脈を保つ。',
   },
-  {
-    id: 'wholesale', label: '卸販売', cs: 'wholesale', min: 2,
-    goal: '「すぐ仕入れられる小物がある」という手軽な入口を提示する。',
-    photo: 'img-071.jpg',
-    script: `フルオーダー以外に、手軽に始められる卸販売もご用意しています。
-
-ポケットチーフは1柄タイプが定価¥2,900のところ卸値¥1,450、2柄タイプが定価¥3,500のところ¥1,750です。
-
-ミニネクタイとミニ蝶ネクタイはそれぞれ定価¥3,900のところ卸値¥1,950とほぼ半額でご提供しています。
-
-最低発注は¥10,000から、送料は別途となります。
-
-生地を持ち込んでいただいての加工も承っており、チーフ1枚¥3,000、10枚以上なら¥1,000/枚となります。
-
-スーツをご購入のお客様への小物提案として、追加収益の柱にしていただけます。`,
-    points: [
-      '「すぐ始められる」「リスクが低い」入口として提示する。フルオーダーに迷っている相手への別ルート。',
-      '小物は在庫リスクが低い。「試しにここから始める」という提案ができる。',
-      '「スーツとの組み合わせ提案ができる」という付加価値の話に広げてもよい。',
-    ],
+  { id:'wholesale', label:'卸販売', cs:'wholesale', min:2, photo:'img-071.jpg',
+    goal:'「すぐ仕入れられる小物がある」という手軽な入口を提示する。',
+    script:`フルオーダー以外に、手軽に始められる卸販売もご用意しています。\n\nポケットチーフは1柄タイプが定価¥2,900のところ卸値¥1,450、2柄タイプが定価¥3,500のところ¥1,750です。\n\nミニネクタイとミニ蝶ネクタイはそれぞれ定価¥3,900のところ卸値¥1,950とほぼ半額でご提供しています。\n\n最低発注は¥10,000から、送料は別途となります。\n\n生地を持ち込んでいただいての加工も承っており、チーフ1枚¥3,000、10枚以上なら¥1,000/枚となります。\n\nスーツをご購入のお客様への小物提案として、追加収益の柱にしていただけます。`,
+    points:['「すぐ始められる」「リスクが低い」入口として提示する。フルオーダーに迷っている相手への別ルート。','小物は在庫リスクが低い。「試しにここから始める」という提案ができる。','「スーツとの組み合わせ提案ができる」という付加価値の話に広げてもよい。'],
   },
-  {
-    id: 'hearing', label: 'ヒアリング', cs: null, min: 5, bant: true,
-    goal: '相手の状況・課題・決定プロセスを把握し、二次商談に必要な情報を揃える。',
-    photo: null,
-    script: `ここまで一方的にお話ししてしまいましたが、ここからは御社の状況をお聞きできればと思います。
-
-まず現状についてお聞きしてもよいでしょうか。
-特殊体型のお客様をお断りする場面は、月にどのくらいありますか？
-
-（回答を受ける）
-
-外注先を使ったことはありますか？その際に困ったことや不安だったことはありましたか？
-
-（回答を受ける）
-
-今後、御社として特に強化していきたいサービスの方向性はありますか？
-
-ありがとうございます。それでは実現可能な進め方を設計するために、差し支えない範囲でいくつか確認させてください。
-
-（BANTチェックリストを参照しながら確認）`,
-    points: [
-      'この時間が商談の山場。焦らず、相手に十分話してもらう。',
-      '回答を復唱して「〇〇ということですね」と確認することで信頼感が増す。',
-      'BANT全部聞こうとしなくていい。自然な会話の中で2〜3個取れれば十分。',
-    ],
-    watch: '一問一答になりすぎると尋問に見える。会話として流れるように。',
+  { id:'hearing', label:'ヒアリング', cs:null, min:5, photo:null, bant:true,
+    goal:'相手の状況・課題・決定プロセスを把握し、二次商談に必要な情報を揃える。',
+    script:`ここまで一方的にお話ししてしまいましたが、ここからは御社の状況をお聞きできればと思います。\n\nまず現状についてお聞きしてもよいでしょうか。\n特殊体型のお客様をお断りする場面は、月にどのくらいありますか？\n\n（回答を受ける）\n\n外注先を使ったことはありますか？その際に困ったことや不安だったことはありましたか？\n\n（回答を受ける）\n\n今後、御社として特に強化していきたいサービスの方向性はありますか？\n\nありがとうございます。それでは実現可能な進め方を設計するために、差し支えない範囲でいくつか確認させてください。\n\n（BANTチェックリストを参照しながら確認）`,
+    points:['この時間が商談の山場。焦らず、相手に十分話してもらう。','回答を復唱して「〇〇ということですね」と確認することで信頼感が増す。','BANT全部聞こうとしなくていい。自然な会話の中で2〜3個取れれば十分。'],
+    watch:'一問一答になりすぎると尋問に見える。会話として流れるように。',
   },
-  {
-    id: 'qa', label: 'Q&A想定', cs: null, min: 3,
-    goal: '想定される質問に即座・自信を持って答え、信頼感を高める。',
-    photo: null,
-    script: `想定Q&Aです。質問が来たときのガイドとして使ってください。
-
-Q: どこまでの仕様に対応できますか？
-→ 特殊体型・特殊素材・特殊仕様も含め幅広く対応可能です。詳細は技術者との打ち合わせで確認しながら進めます。
-
-Q: 納期はどれくらいですか？
-→ 案件内容によって変動します。詳細は二次商談で具体的に確認させてください。
-
-Q: 一点物でも依頼できますか？
-→ はい、問題ありません。むしろ一点物のフルオーダーは得意としております。
-
-Q: 複数着の制作も可能ですか？
-→ 可能です。ロットが少ない場合は単価が上がることがありますが、事前にご相談しながら進めます。
-
-Q: 品質面が心配です。
-→ 著名な経営者層のスーツ制作実績もあり、細部まで丁寧に仕上げる技術力を評価いただいております。
-
-Q: 急ぎの案件でも対応できますか？
-→ 内容によりますが可能な範囲で調整いたします。まずご相談ください。`,
-    points: [
-      '「詳細は二次商談で」という返しを多用する。すべて今日決めようとしない。',
-      '答えに詰まったときは「すみません、その点は詳細確認して改めてご連絡します」が誠実で好印象。',
-      '質問が来ること自体は興味の証拠。ポジティブに受け取る。',
-    ],
+  { id:'qa', label:'Q&A想定', cs:null, min:3, photo:null,
+    goal:'想定される質問に即座・自信を持って答え、信頼感を高める。',
+    script:`Q: どこまでの仕様に対応できますか？\n→ 特殊体型・特殊素材・特殊仕様も含め幅広く対応可能です。詳細は技術者との打ち合わせで確認しながら進めます。\n\nQ: 納期はどれくらいですか？\n→ 案件内容によって変動します。詳細は二次商談で具体的に確認させてください。\n\nQ: 一点物でも依頼できますか？\n→ はい、問題ありません。むしろ一点物のフルオーダーは得意としております。\n\nQ: 複数着の制作も可能ですか？\n→ 可能です。ロットが少ない場合は単価が上がることがありますが、事前にご相談しながら進めます。\n\nQ: 品質面が心配です。\n→ 著名な経営者層のスーツ制作実績もあり、細部まで丁寧に仕上げる技術力を評価いただいております。\n\nQ: 急ぎの案件でも対応できますか？\n→ 内容によりますが可能な範囲で調整いたします。まずご相談ください。`,
+    points:['「詳細は二次商談で」という返しを多用する。すべて今日決めようとしない。','答えに詰まったときは「その点は詳細確認して改めてご連絡します」が誠実で好印象。','質問が来ること自体は興味の証拠。ポジティブに受け取る。'],
   },
-  {
-    id: 'closing', label: 'クロージング', cs: 'steps', min: 3, objections: true,
-    goal: '二次商談の日程を決めて終わる。今日の商談をクローズドにしない。',
-    photo: 'img-054.jpg',
-    script: `ありがとうございます。
-いろいろとお話しいただけて大変参考になりました。
-
-もしよろしければ、まずは御社の体制やご希望を伺いながら、最適なプランを具体的にご提示する場をいただけますでしょうか。
-
-たとえば「〇月〇日（〇曜日）」か「〇月〇日（〇曜日）」ではいかがでしょうか？
-
-（相手の反応を見ながら）
-お時間は午前と午後はどちらがご都合よろしいでしょうか。
-
-ありがとうございます。では●月●日の●時でお時間を頂戴できればと思います。
-
-本日、私の方からのご案内は以上となりますが、何かご不明点はございますか？
-
-（回答不可の場合）
-承知いたしました。次回の打ち合わせの際に改めてご説明いたします。
-
-本日はありがとうございました。`,
-    points: [
-      '日程は「いつが空いてますか？」ではなく「〇日か〇日はいかがですか？」と二択で提示する。',
-      '相手が「検討します」と言いそうな雰囲気なら、切り返しトークを準備する（下のアコーディオン参照）。',
-      '最後に必ず「本日のご感想は？」か「特に気になった点は？」と一言聞くと温度感がわかる。',
-    ],
-    watch: '帰り際に「あ、一つ聞いていいですか」という質問が本音のことが多い。時間を作る。',
+  { id:'closing', label:'クロージング', cs:'steps', min:3, photo:'img-054.jpg', objections:true,
+    goal:'二次商談の日程を決めて終わる。今日の商談をクローズドにしない。',
+    script:`ありがとうございます。\nいろいろとお話しいただけて大変参考になりました。\n\nもしよろしければ、まずは御社の体制やご希望を伺いながら、最適なプランを具体的にご提示する場をいただけますでしょうか。\n\nたとえば「〇月〇日（〇曜日）」か「〇月〇日（〇曜日）」ではいかがでしょうか？\n\n（相手の反応を見ながら）\nお時間は午前と午後はどちらがご都合よろしいでしょうか。\n\nありがとうございます。では●月●日の●時でお時間を頂戴できればと思います。\n\n本日、私の方からのご案内は以上となりますが、何かご不明点はございますか？\n\n（回答不可の場合）\n承知いたしました。次回の打ち合わせの際に改めてご説明いたします。\n\n本日はありがとうございました。`,
+    points:['日程は「いつが空いてますか？」ではなく「〇日か〇日はいかがですか？」と二択で提示する。','相手が「検討します」と言いそうな雰囲気なら、切り返しトークを準備する。','最後に必ず「本日のご感想は？」と一言聞くと温度感がわかる。'],
+    watch:'帰り際に「あ、一つ聞いていいですか」という質問が本音のことが多い。時間を作る。',
   },
-  {
-    id: 'contact', label: 'お問い合わせ', cs: 'contact', min: 1,
-    goal: '連絡先を確実に伝え、次のアクションへのハードルを下げる。',
-    photo: 'img-083.jpg',
-    script: `本日はありがとうございました。
-
-ご連絡先をお伝えします。
-
-株式会社 aim-rose（エイムローズ）
-〒542-0081 大阪市中央区南船場2-2-28
-ジェイ・プライド順慶ビル205
-
-電話：06-6261-7373
-FAX：06-6261-7372
-HP：https://aim-rose-order.com/
-
-また、提携店様専用の公式LINEもございます。
-こちらにご登録いただければ、案件のご相談がすぐにできますので、よろしければご登録をお願いいたします。
-
-本日いただいた名刺の情報でフォローのご連絡をさせていただきます。
-引き続きどうぞよろしくお願いいたします。`,
-    points: [
-      '公式LINEへの登録をその場でお願いする。QRコードを見せながら誘導。',
-      '次回のリマインドを「3日後に確認のご連絡をします」と伝えておく。',
-      '名刺交換がまだなら必ずこのタイミングで。',
-    ],
+  { id:'contact', label:'お問い合わせ', cs:'contact', min:1, photo:'img-083.jpg',
+    goal:'連絡先を確実に伝え、次のアクションへのハードルを下げる。',
+    script:`本日はありがとうございました。\n\nご連絡先をお伝えします。\n\n株式会社 aim-rose（エイムローズ）\n〒542-0081 大阪市中央区南船場2-2-28\nジェイ・プライド順慶ビル205\n\n電話：06-6261-7373\nFAX：06-6261-7372\nHP：https://aim-rose-order.com/\n\nまた、提携店様専用の公式LINEもございます。\nこちらにご登録いただければ、案件のご相談がすぐにできますので、よろしければご登録をお願いいたします。\n\n本日いただいた名刺の情報でフォローのご連絡をさせていただきます。\n引き続きどうぞよろしくお願いいたします。`,
+    points:['公式LINEへの登録をその場でお願いする。QRコードを見せながら誘導。','次回のリマインドを「3日後に確認のご連絡をします」と伝えておく。','名刺交換がまだなら必ずこのタイミングで。'],
   },
 ]
 
@@ -587,466 +355,394 @@ HP：https://aim-rose-order.com/
 // CUSTOMER VIEW
 // ════════════════════════════════════════════════════════════════════════════
 function CustomerView() {
+  const mob = useIsMobile()
   const [scrollPct, setScrollPct] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const sectionRefs = useRef({})
-  const sections=['intro','background','strength','service','method1','method2','pricing','wholesale','steps','contact']
-  const labels={intro:'提携のご提案',background:'提携の背景',strength:'弊社の強み',service:'サービス内容',method1:'提携方法①',method2:'提携方法②',pricing:'料金表',wholesale:'卸販売',steps:'提携開始',contact:'お問い合わせ'}
+  const sections = ['intro','background','strength','service','method1','method2','pricing','wholesale','steps','contact']
+  const labels = { intro:'提携のご提案', background:'提携の背景', strength:'弊社の強み', service:'サービス内容', method1:'提携方法①', method2:'提携方法②', pricing:'料金表', wholesale:'卸販売', steps:'提携開始', contact:'お問い合わせ' }
 
-  useEffect(()=>{
-    const h=()=>{ const el=document.documentElement; setScrollPct(Math.min(1,el.scrollTop/(el.scrollHeight-el.clientHeight)||0)) }
-    window.addEventListener('scroll',h); return ()=>window.removeEventListener('scroll',h)
-  },[])
-  useEffect(()=>{
-    const obs=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){e.target.style.opacity='1';e.target.style.transform='translateY(0)'}}),{threshold:.07})
-    document.querySelectorAll('.fi').forEach(el=>obs.observe(el)); return ()=>obs.disconnect()
-  },[])
-  const handleSync=useCallback(id=>sectionRefs.current[id]?.scrollIntoView({behavior:'smooth',block:'start'}),[])
+  useEffect(() => {
+    const h = () => { const el = document.documentElement; setScrollPct(Math.min(1, el.scrollTop / (el.scrollHeight - el.clientHeight) || 0)) }
+    window.addEventListener('scroll', h); return () => window.removeEventListener('scroll', h)
+  }, [])
+
+  useEffect(() => {
+    const obs = new IntersectionObserver(entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible') }), { threshold: 0.07 })
+    document.querySelectorAll('.fi').forEach(el => obs.observe(el))
+    return () => obs.disconnect()
+  }, [])
+
+  const handleSync = useCallback(id => sectionRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' }), [])
   useSyncReceive(handleSync)
-  const fi={opacity:0,transform:'translateY(50px)',transition:'opacity 0.9s ease, transform 0.9s ease'}
+
+  const sp = (d, m) => mob ? m : d  // spacing picker
 
   return (
-    <div style={{background:C.warmWhite,color:C.charcoal,fontFamily:"'Noto Sans JP', sans-serif"}}>
+    <div style={{ background: C.warmWhite, color: C.charcoal, fontFamily: "'Noto Sans JP', sans-serif" }}>
+      <GlobalStyles />
 
-      {/* Progress */}
-      <div style={{position:'fixed',top:0,left:0,right:0,height:3,zIndex:1000,background:'#e8e0d4'}}>
-        <div style={{height:'100%',width:`${scrollPct*100}%`,background:`linear-gradient(90deg,${C.goldDark},${C.goldLight})`,transition:'width 0.1s'}}/>
+      {/* Progress bar */}
+      <div style={{ position:'fixed', top:0, left:0, right:0, height:3, zIndex:1000, background:'#e8e0d4' }}>
+        <div style={{ height:'100%', width:`${scrollPct*100}%`, background:`linear-gradient(90deg,${C.goldDark},${C.goldLight})`, transition:'width 0.1s' }} />
       </div>
 
       {/* Sidebar */}
-      <div style={{position:'fixed',top:0,left:0,bottom:0,zIndex:900,width:sidebarOpen?220:48,transition:'width 0.3s ease',background:sidebarOpen?'rgba(26,22,18,0.97)':'transparent',overflow:'hidden',display:'flex',flexDirection:'column'}}>
-        <button onClick={()=>setSidebarOpen(!sidebarOpen)} style={{width:48,height:48,background:'none',border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,color:sidebarOpen?C.goldLight:C.gold}}>
+      <div style={{ position:'fixed', top:0, left:0, bottom:0, zIndex:900, width: sidebarOpen ? (mob ? '100vw' : 220) : 48, transition:'width 0.3s ease', background: sidebarOpen ? 'rgba(26,22,18,0.98)' : 'transparent', overflow:'hidden', display:'flex', flexDirection:'column' }}>
+        <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{ width:48, height:48, background:'none', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color: sidebarOpen ? C.goldLight : C.gold }}>
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-            {sidebarOpen?<><path d="M15 5L5 15"/><path d="M5 5l10 10"/></>:<><line x1="2" y1="5" x2="18" y2="5"/><line x1="2" y1="10" x2="18" y2="10"/><line x1="2" y1="15" x2="18" y2="15"/></>}
+            {sidebarOpen ? <><path d="M15 5L5 15"/><path d="M5 5l10 10"/></> : <><line x1="2" y1="5" x2="18" y2="5"/><line x1="2" y1="10" x2="18" y2="10"/><line x1="2" y1="15" x2="18" y2="15"/></>}
           </svg>
         </button>
-        {sidebarOpen&&<nav style={{padding:'16px 0',overflowY:'auto'}}>
-          {sections.map(id=><button key={id} onClick={()=>{sectionRefs.current[id]?.scrollIntoView({behavior:'smooth',block:'start'});setSidebarOpen(false)}} style={{display:'block',width:'100%',padding:'10px 24px',background:'none',border:'none',cursor:'pointer',color:C.goldLight,fontSize:12,textAlign:'left',letterSpacing:'0.05em',whiteSpace:'nowrap'}}>{labels[id]}</button>)}
-        </nav>}
+        {sidebarOpen && (
+          <nav style={{ padding: mob ? '24px 0' : '16px 0', overflowY:'auto', flex:1 }}>
+            {sections.map(id => (
+              <button key={id} onClick={() => { sectionRefs.current[id]?.scrollIntoView({ behavior:'smooth', block:'start' }); setSidebarOpen(false) }}
+                style={{ display:'block', width:'100%', padding: mob ? '16px 32px' : '10px 24px', background:'none', border:'none', cursor:'pointer', color:C.goldLight, fontSize: mob ? 15 : 12, textAlign:'left', letterSpacing:'0.05em', whiteSpace:'nowrap' }}>
+                {labels[id]}
+              </button>
+            ))}
+          </nav>
+        )}
       </div>
 
-      {/* ══════════════════════════════════════════════════════
-          HERO — img-002: ランウェイモデルが放つ圧倒的オーラ
-          Three.jsパーティクルをスクリーンブレンドで重ねる
-          ════════════════════════════════════════════════════ */}
+      {/* ── HERO ──────────────────────────────────────────────────────── */}
       <section ref={el=>sectionRefs.current['intro']=el}
-        style={{minHeight:'100vh',position:'relative',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',overflow:'hidden',background:C.charcoal,padding:'80px 60px 60px'}}>
-        {/* 実写背景 */}
-        <div style={{position:'absolute',inset:0,overflow:'hidden'}}>
-          <img src="/images/img-002.jpg" alt="" style={{width:'100%',height:'100%',objectFit:'cover',objectPosition:'center top',opacity:.55,filter:'brightness(0.7) contrast(1.1)'}} />
+        style={{ minHeight:'100svh', position:'relative', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', overflow:'hidden', background:C.charcoal, padding: mob ? '80px 24px 48px' : '80px 60px 60px' }}>
+        <div style={{ position:'absolute', inset:0, overflow:'hidden' }}>
+          <img src="/images/img-002.jpg" alt="" style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition: mob ? '70% top' : 'center top', opacity:.55, filter:'brightness(0.7) contrast(1.1)' }} />
         </div>
-        {/* グラデーションオーバーレイ */}
-        <div style={{position:'absolute',inset:0,background:'linear-gradient(135deg,rgba(13,12,10,0.75) 0%,rgba(26,22,18,0.4) 50%,rgba(13,12,10,0.8) 100%)',pointerEvents:'none'}}/>
-        {/* Threejsパーティクル（スクリーン合成） */}
-        <div style={{position:'absolute',inset:0,mixBlendMode:'screen',opacity:.7}}>
-          <HeroParticles/>
-        </div>
-        {/* 縦ライン装飾 */}
-        <div style={{position:'absolute',top:'10%',left:'6%',width:1,height:'80%',background:`linear-gradient(180deg,transparent,${C.gold}50,transparent)`,pointerEvents:'none'}}/>
-        <div style={{position:'absolute',top:'10%',right:'6%',width:1,height:'80%',background:`linear-gradient(180deg,transparent,${C.gold}50,transparent)`,pointerEvents:'none'}}/>
-        {/* コンテンツ */}
-        <div style={{position:'relative',zIndex:1,textAlign:'center',maxWidth:720}}>
-          <div style={{fontFamily:"'Cormorant Garamond'",fontSize:12,color:C.goldLight,letterSpacing:'0.45em',textTransform:'uppercase',marginBottom:28,textShadow:'0 2px 20px rgba(0,0,0,0.8)'}}>Partnership Proposal</div>
-          <h1 style={{fontFamily:"'Cormorant Garamond'",fontWeight:300,fontSize:'clamp(52px,9vw,104px)',lineHeight:1.05,color:C.ivory,marginBottom:18,letterSpacing:'-0.01em',textShadow:'0 4px 40px rgba(0,0,0,0.9)'}}>提携のご提案</h1>
-          <div style={{width:60,height:1,background:C.gold,margin:'0 auto 24px'}}/>
-          <p style={{fontFamily:"'Noto Serif JP'",fontSize:'clamp(15px,2vw,19px)',color:'#d8cfc0',lineHeight:1.9,fontWeight:300,marginBottom:44,textShadow:'0 2px 12px rgba(0,0,0,0.8)'}}>オーダースーツ店様向けの協業案</p>
-          <div style={{display:'inline-block',padding:'14px 44px',border:`1px solid ${C.gold}70`,color:C.goldLight,fontSize:12,letterSpacing:'0.2em',backdropFilter:'blur(4px)',background:'rgba(0,0,0,0.3)'}}>株式会社 aim-rose（エイムローズ）</div>
+        <div style={{ position:'absolute', inset:0, background:'linear-gradient(135deg,rgba(13,12,10,0.75) 0%,rgba(26,22,18,0.4) 50%,rgba(13,12,10,0.8) 100%)', pointerEvents:'none' }} />
+        <div style={{ position:'absolute', inset:0, mixBlendMode:'screen', opacity:.7 }}><HeroParticles /></div>
+        {!mob && <>
+          <div style={{ position:'absolute', top:'10%', left:'6%', width:1, height:'80%', background:`linear-gradient(180deg,transparent,${C.gold}50,transparent)`, pointerEvents:'none' }} />
+          <div style={{ position:'absolute', top:'10%', right:'6%', width:1, height:'80%', background:`linear-gradient(180deg,transparent,${C.gold}50,transparent)`, pointerEvents:'none' }} />
+        </>}
+        <div style={{ position:'relative', zIndex:1, textAlign:'center', maxWidth: mob ? '100%' : 720 }}>
+          <div style={{ fontFamily:"'Cormorant Garamond'", fontSize: mob ? 10 : 12, color:C.goldLight, letterSpacing:'0.45em', textTransform:'uppercase', marginBottom: mob ? 20 : 28, textShadow:'0 2px 20px rgba(0,0,0,0.8)' }}>Partnership Proposal</div>
+          <h1 style={{ fontFamily:"'Cormorant Garamond'", fontWeight:300, fontSize: mob ? 'clamp(44px,12vw,64px)' : 'clamp(52px,9vw,104px)', lineHeight:1.05, color:C.ivory, marginBottom: mob ? 14 : 18, letterSpacing:'-0.01em', textShadow:'0 4px 40px rgba(0,0,0,0.9)' }}>提携のご提案</h1>
+          <div style={{ width:60, height:1, background:C.gold, margin:'0 auto', marginBottom: mob ? 16 : 24 }} />
+          <p style={{ fontFamily:"'Noto Serif JP'", fontSize: mob ? 14 : 'clamp(15px,2vw,19px)', color:'#d8cfc0', lineHeight:1.9, fontWeight:300, marginBottom: mob ? 32 : 44, textShadow:'0 2px 12px rgba(0,0,0,0.8)' }}>オーダースーツ店様向けの協業案</p>
+          <div style={{ display:'inline-block', padding: mob ? '11px 28px' : '14px 44px', border:`1px solid ${C.gold}70`, color:C.goldLight, fontSize: mob ? 11 : 12, letterSpacing:'0.15em', backdropFilter:'blur(4px)', background:'rgba(0,0,0,0.3)' }}>株式会社 aim-rose（エイムローズ）</div>
         </div>
       </section>
 
-      {/* ══════════════════════════════════════════════════════
-          BACKGROUND — 三方よし
-          左: img-014 職人と顧客の対話シーン
-          右: テキスト
-          ════════════════════════════════════════════════════ */}
+      {/* ── BACKGROUND ───────────────────────────────────────────────── */}
       <section ref={el=>sectionRefs.current['background']=el} className="fi"
-        style={{...fi,minHeight:'100vh',display:'grid',gridTemplateColumns:'1fr 1fr',overflow:'hidden'}}>
-        {/* 左: 実写 + Three.js球体をオーバーレイ */}
-        <div style={{position:'relative',minHeight:520,background:C.charcoal,overflow:'hidden'}}>
-          <img src="/images/img-014.jpg" alt="テーラリング" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',objectPosition:'center',opacity:.7,filter:'brightness(0.75) saturate(0.9)'}}/>
-          <div style={{position:'absolute',inset:0,background:'linear-gradient(180deg,rgba(13,12,10,0.2) 0%,rgba(13,12,10,0.6) 100%)'}}/>
-          <div style={{position:'absolute',bottom:44,left:0,right:0,textAlign:'center',zIndex:1}}>
-            <span style={{fontFamily:"'Cormorant Garamond'",fontSize:38,color:C.gold,fontStyle:'italic',textShadow:'0 2px 20px rgba(0,0,0,0.8)'}}>三方よし</span>
-            <p style={{fontFamily:"'Noto Serif JP'",fontSize:12,color:'#c8bfb0',marginTop:8,letterSpacing:'0.1em'}}>御社 × お客様 × エイムローズ</p>
+        style={{ display:'flex', flexDirection: mob ? 'column' : 'row', overflow:'hidden', minHeight: mob ? 'auto' : '100vh' }}>
+        <div style={{ position:'relative', height: mob ? 280 : 'auto', flex: mob ? 'none' : 1, background:C.charcoal, overflow:'hidden' }}>
+          <img src="/images/img-014.jpg" alt="" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', objectPosition:'center', opacity:.7, filter:'brightness(0.75) saturate(0.9)' }} />
+          <div style={{ position:'absolute', inset:0, background:'linear-gradient(180deg,rgba(13,12,10,0.2) 0%,rgba(13,12,10,0.6) 100%)' }} />
+          <div style={{ position:'absolute', bottom: mob ? 24 : 44, left:0, right:0, textAlign:'center', zIndex:1 }}>
+            <span style={{ fontFamily:"'Cormorant Garamond'", fontSize: mob ? 28 : 38, color:C.gold, fontStyle:'italic', textShadow:'0 2px 20px rgba(0,0,0,0.8)' }}>三方よし</span>
+            <p style={{ fontFamily:"'Noto Serif JP'", fontSize: mob ? 11 : 12, color:'#c8bfb0', marginTop:6, letterSpacing:'0.1em' }}>御社 × お客様 × エイムローズ</p>
           </div>
         </div>
-        {/* 右: テキスト */}
-        <div style={{padding:'80px 56px',display:'flex',flexDirection:'column',justifyContent:'center',background:C.warmWhite}}>
-          <SLabel en="Background"/>
-          <h2 style={hS(C.charcoal)}>Win-Win-Win の<br/>提携モデル</h2>
-          <div style={{width:40,height:2,background:C.gold,marginBottom:40}}/>
+        <div style={{ padding: padSm(mob), display:'flex', flexDirection:'column', justifyContent:'center', background:C.warmWhite, flex: mob ? 'none' : 1 }}>
+          <SLabel en="Background" />
+          <h2 style={hS(C.charcoal)}>Win-Win-Win の<br />提携モデル</h2>
+          <div style={{ width:40, height:2, background:C.gold, marginBottom: mob ? 28 : 40 }} />
           {[{icon:'🏪',title:'御社のメリット',desc:'フルオーダー対応で受注機会が広がり、機会損失が減ります。'},
             {icon:'👤',title:'お客様のメリット',desc:'より幅広い選択肢と高品質な製品で満足度がアップします。'},
             {icon:'🌹',title:'弊社のメリット',desc:'長年培ってきた技術と経験を最大限に活用できます。'}
-          ].map((item,i)=>(
-            <div key={i} style={{display:'flex',gap:18,marginBottom:24,padding:'18px 22px',background:i%2===0?C.cream:C.warmWhite,borderLeft:`2px solid ${C.gold}`}}>
-              <span style={{fontSize:20,flexShrink:0}}>{item.icon}</span>
+          ].map((item,i) => (
+            <div key={i} style={{ display:'flex', gap:14, marginBottom:16, padding: mob ? '14px 16px' : '18px 22px', background:i%2===0?C.cream:C.warmWhite, borderLeft:`2px solid ${C.gold}` }}>
+              <span style={{ fontSize:18, flexShrink:0 }}>{item.icon}</span>
               <div>
-                <p style={{fontFamily:"'Noto Serif JP'",fontSize:14,fontWeight:500,color:C.charcoal,marginBottom:5}}>{item.title}</p>
-                <p style={{fontSize:13,color:C.muted,lineHeight:1.7}}>{item.desc}</p>
+                <p style={{ fontFamily:"'Noto Serif JP'", fontSize: mob ? 13 : 14, fontWeight:500, color:C.charcoal, marginBottom:4 }}>{item.title}</p>
+                <p style={{ fontSize: mob ? 12 : 13, color:C.muted, lineHeight:1.7 }}>{item.desc}</p>
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ══════════════════════════════════════════════════════
-          STRENGTH — 職人の技術
-          背景: img-083 ミシンのセピア写真 + SpoolScene overlay
-          右列: 実績の幅を示す3枚ギャラリー
-          ════════════════════════════════════════════════════ */}
+      {/* ── STRENGTH ──────────────────────────────────────────────────── */}
       <section ref={el=>sectionRefs.current['strength']=el} className="fi"
-        style={{...fi,minHeight:'100vh',position:'relative',overflow:'hidden',background:C.charcoal}}>
-        {/* ミシン写真を背景に */}
-        <img src="/images/img-083.jpg" alt="職人技術" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',objectPosition:'center',opacity:.25,filter:'brightness(0.6) sepia(0.3)'}}/>
-        {/* SpoolSceneをオーバーレイ（低透明度） */}
-        <div style={{position:'absolute',inset:0,opacity:.35}}><SpoolScene/></div>
-        <div style={{position:'absolute',inset:0,background:'linear-gradient(180deg,rgba(13,12,10,0.85) 0%,rgba(13,12,10,0.55) 40%,rgba(13,12,10,0.85) 100%)',pointerEvents:'none'}}/>
-        <div style={{position:'relative',zIndex:1,maxWidth:1200,margin:'0 auto',padding:'100px 80px'}}>
-          <SLabel en="Our Strengths"/>
+        style={{ position:'relative', overflow:'hidden', background:C.charcoal, minHeight: mob ? 'auto' : '100vh' }}>
+        <img src="/images/img-083.jpg" alt="" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', opacity:.25, filter:'brightness(0.6) sepia(0.3)' }} />
+        <div style={{ position:'absolute', inset:0, opacity:.35 }}><SpoolScene /></div>
+        <div style={{ position:'absolute', inset:0, background:'linear-gradient(180deg,rgba(13,12,10,0.88) 0%,rgba(13,12,10,0.55) 40%,rgba(13,12,10,0.88) 100%)', pointerEvents:'none' }} />
+        <div style={{ position:'relative', zIndex:1, maxWidth:1200, margin:'0 auto', padding: pad(mob) }}>
+          <SLabel en="Our Strengths" />
           <h2 style={hS(C.ivory)}>職人の技術と20年の実績</h2>
-          <div style={{width:40,height:2,background:C.gold,marginBottom:60}}/>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:60,alignItems:'start'}}>
-            {/* 左: 3つの強み */}
-            <div style={{display:'flex',flexDirection:'column',gap:2}}>
-              {[{num:'01',title:'職人の技術',body:'ジバンシー、コムデギャルソンなどのハイブランドを担う縫製工場で修得した技術。20年以上の実績。'},
+          <div style={{ width:40, height:2, background:C.gold, marginBottom: mob ? 32 : 60 }} />
+          <div style={{ display:'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: mob ? 16 : 60, alignItems:'start' }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+              {[{num:'01',title:'職人の技術',body:'ジバンシー、コムデギャルソンなどのハイブランドを担う縫製工場で修得した技術を持っています。20年以上の実績で多ジャンル、フルアイテムの製作をしてきました。'},
                 {num:'02',title:'総合的な製作能力',body:'デザイン、パターン、企画、縫製全てを経験し、フルオーダー製作のノウハウを持っています。'},
-                {num:'03',title:'過去の実績',body:'小澤征爾指揮による演劇衣装製作・森英恵デザイナーのサンプル製作・東京/関西コレクション衣装・宝塚歌劇団番組での製作指導など。'}
-              ].map((item,i)=>(
-                <div key={i} style={{padding:'32px 28px',background:'rgba(24,22,20,0.85)',borderTop:`2px solid ${C.gold}`,marginBottom:2}}>
-                  <div style={{fontFamily:"'Cormorant Garamond'",fontSize:52,fontWeight:300,color:`${C.gold}18`,lineHeight:1,marginBottom:14}}>{item.num}</div>
-                  <h3 style={{fontFamily:"'Noto Serif JP'",fontSize:16,fontWeight:500,color:C.ivory,marginBottom:10}}>{item.title}</h3>
-                  <div style={{width:22,height:1,background:C.gold,marginBottom:12}}/>
-                  <p style={{fontSize:13,lineHeight:1.9,color:'#8a8070'}}>{item.body}</p>
+                {num:'03',title:'過去の実績',body:'小澤征爾指揮による演劇衣装製作・森英恵デザイナーのサンプル製作・東京/関西コレクション衣装製作・宝塚歌劇団番組での製作指導など幅広い分野での実績。'}
+              ].map((item,i) => (
+                <div key={i} style={{ padding: mob ? '20px 18px' : '32px 28px', background:'rgba(24,22,20,0.85)', borderTop:`2px solid ${C.gold}`, marginBottom:2 }}>
+                  {!mob && <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:52, fontWeight:300, color:`${C.gold}18`, lineHeight:1, marginBottom:14 }}>{item.num}</div>}
+                  <h3 style={{ fontFamily:"'Noto Serif JP'", fontSize: mob ? 14 : 16, fontWeight:500, color:C.ivory, marginBottom: mob ? 8 : 10 }}>{mob ? item.num + '. ' : ''}{item.title}</h3>
+                  <div style={{ width:22, height:1, background:C.gold, marginBottom: mob ? 10 : 12 }} />
+                  <p style={{ fontSize: mob ? 12 : 13, lineHeight:1.9, color:'#8a8070' }}>{item.body}</p>
                 </div>
               ))}
             </div>
-            {/* 右: 実績範囲ギャラリー */}
             <div>
-              <p style={{fontFamily:"'Cormorant Garamond'",fontSize:12,color:C.gold,letterSpacing:'0.3em',marginBottom:20}}>RANGE OF WORKS</p>
-              {/* メインショット: img-057 ダークコート（特殊案件の象徴） */}
-              <div style={{position:'relative',marginBottom:12,overflow:'hidden',height:260}}>
-                <img src="/images/img-057.jpg" alt="特殊フルオーダー" style={{width:'100%',height:'100%',objectFit:'cover',objectPosition:'center',filter:'brightness(0.85)'}}/>
-                <div style={{position:'absolute',bottom:0,left:0,right:0,padding:'20px 16px',background:'linear-gradient(0deg,rgba(13,12,10,0.9),transparent)'}}>
-                  <span style={{fontSize:11,color:C.goldLight,letterSpacing:'0.08em'}}>特殊素材・特殊仕様の案件まで対応</span>
+              <p style={{ fontFamily:"'Cormorant Garamond'", fontSize:11, color:C.gold, letterSpacing:'0.3em', marginBottom: mob ? 12 : 20 }}>RANGE OF WORKS</p>
+              <div style={{ position:'relative', marginBottom:10, overflow:'hidden', height: mob ? 180 : 260 }}>
+                <img src="/images/img-057.jpg" alt="特殊フルオーダー" style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center', filter:'brightness(0.85)' }} />
+                <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'14px 14px', background:'linear-gradient(0deg,rgba(13,12,10,0.9),transparent)' }}>
+                  <span style={{ fontSize: mob ? 10 : 11, color:C.goldLight, letterSpacing:'0.08em' }}>特殊素材・特殊仕様の案件まで対応</span>
                 </div>
               </div>
-              {/* サブギャラリー: img-059, img-044 */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                <div style={{position:'relative',overflow:'hidden',height:160}}>
-                  <img src="/images/img-059.jpg" alt="舞台衣装" style={{width:'100%',height:'100%',objectFit:'cover',filter:'brightness(0.8)'}}/>
-                  <div style={{position:'absolute',bottom:0,left:0,right:0,padding:'10px 12px',background:'linear-gradient(0deg,rgba(13,12,10,0.9),transparent)'}}>
-                    <span style={{fontSize:10,color:C.goldLight}}>舞台・コスチューム</span>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                {[{src:'img-059.jpg',label:'舞台・コスチューム'},{src:'img-044.jpg',label:'レディース全アイテム'}].map((item,i) => (
+                  <div key={i} style={{ position:'relative', overflow:'hidden', height: mob ? 120 : 160 }}>
+                    <img src={`/images/${item.src}`} alt={item.label} style={{ width:'100%', height:'100%', objectFit:'cover', filter:'brightness(0.8)' }} />
+                    <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'8px 10px', background:'linear-gradient(0deg,rgba(13,12,10,0.9),transparent)' }}>
+                      <span style={{ fontSize:10, color:C.goldLight }}>{item.label}</span>
+                    </div>
                   </div>
-                </div>
-                <div style={{position:'relative',overflow:'hidden',height:160}}>
-                  <img src="/images/img-044.jpg" alt="ワンピース" style={{width:'100%',height:'100%',objectFit:'cover',objectPosition:'center top',filter:'brightness(0.85)'}}/>
-                  <div style={{position:'absolute',bottom:0,left:0,right:0,padding:'10px 12px',background:'linear-gradient(0deg,rgba(13,12,10,0.9),transparent)'}}>
-                    <span style={{fontSize:10,color:C.goldLight}}>レディース全アイテム</span>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ══════════════════════════════════════════════════════
-          SERVICE — img-060 グレースーツ × パリ
-          「この品質を御社のお客様に」という訴求
-          ════════════════════════════════════════════════════ */}
+      {/* ── SERVICE ───────────────────────────────────────────────────── */}
       <section ref={el=>sectionRefs.current['service']=el} className="fi"
-        style={{...fi,minHeight:'100vh',display:'grid',gridTemplateColumns:'1fr 1fr',overflow:'hidden'}}>
-        {/* 左: テキスト */}
-        <div style={{padding:'80px 56px',display:'flex',flexDirection:'column',justifyContent:'center',background:C.cream}}>
-          <SLabel en="Services"/>
+        style={{ display:'flex', flexDirection: mob ? 'column' : 'row', overflow:'hidden', minHeight: mob ? 'auto' : '100vh' }}>
+        <div style={{ padding: padSm(mob), display:'flex', flexDirection:'column', justifyContent:'center', background:C.cream, flex: mob ? 'none' : 1 }}>
+          <SLabel en="Services" />
           <h2 style={hS(C.charcoal)}>2つの提携方法</h2>
-          <div style={{width:40,height:2,background:C.gold,marginBottom:50}}/>
+          <div style={{ width:40, height:2, background:C.gold, marginBottom: mob ? 28 : 50 }} />
           {[{method:'提携方法 01',title:'非対面式受注',sub:'フリーサイズデザインサンプルによる',tag:'導入が簡単'},
             {method:'提携方法 02',title:'対面式受注',sub:'フルオーダーによる出張対応',tag:'完全フルオーダー'}
-          ].map((item,i)=>(
-            <div key={i} style={{padding:'28px 36px',background:C.warmWhite,borderLeft:`3px solid ${C.gold}`,marginBottom:20}}>
-              <span style={{fontFamily:"'Cormorant Garamond'",fontSize:12,color:C.gold,letterSpacing:'0.2em'}}>{item.method}</span>
-              <h3 style={{fontFamily:"'Noto Serif JP'",fontSize:20,fontWeight:500,color:C.charcoal,margin:'8px 0 6px'}}>{item.title}</h3>
-              <p style={{fontSize:13,color:C.muted,marginBottom:12}}>{item.sub}</p>
-              <span style={{display:'inline-block',padding:'3px 14px',background:`${C.gold}15`,border:`1px solid ${C.gold}40`,color:C.goldDark,fontSize:11}}>{item.tag}</span>
+          ].map((item,i) => (
+            <div key={i} style={{ padding: mob ? '20px 20px' : '28px 36px', background:'rgba(250,247,242,0.92)', borderLeft:`3px solid ${C.gold}`, marginBottom: mob ? 14 : 20 }}>
+              <span style={{ fontFamily:"'Cormorant Garamond'", fontSize:11, color:C.gold, letterSpacing:'0.2em' }}>{item.method}</span>
+              <h3 style={{ fontFamily:"'Noto Serif JP'", fontSize: mob ? 18 : 20, fontWeight:500, color:C.charcoal, margin:'6px 0 5px' }}>{item.title}</h3>
+              <p style={{ fontSize: mob ? 12 : 13, color:C.muted, marginBottom:10 }}>{item.sub}</p>
+              <span style={{ display:'inline-block', padding:'3px 12px', background:`${C.gold}15`, border:`1px solid ${C.gold}40`, color:C.goldDark, fontSize:11 }}>{item.tag}</span>
             </div>
           ))}
-          <p style={{marginTop:20,fontSize:13,color:C.muted,lineHeight:2}}>メンズ・レディース問わず対応 ／ 一点物〜複数着まで柔軟に</p>
+          <p style={{ marginTop:16, fontSize: mob ? 11 : 13, color:C.muted, lineHeight:2 }}>メンズ・レディース問わず対応 ／ 一点物〜複数着まで柔軟に</p>
         </div>
-        {/* 右: img-060 高品質の到達点 */}
-        <div style={{position:'relative',overflow:'hidden'}}>
-          <img src="/images/img-060.jpg" alt="品質の到達点" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',objectPosition:'center top',filter:'brightness(0.9)'}}/>
-          <div style={{position:'absolute',inset:0,background:'linear-gradient(270deg,rgba(13,12,10,0.1) 0%,rgba(237,231,217,0.05) 100%)'}}/>
-          <div style={{position:'absolute',bottom:50,left:32,right:32}}>
-            <div style={{padding:'20px 24px',background:'rgba(26,22,18,0.85)',backdropFilter:'blur(8px)',borderLeft:`3px solid ${C.gold}`}}>
-              <p style={{fontFamily:"'Cormorant Garamond'",fontSize:15,color:C.goldLight,fontStyle:'italic',lineHeight:1.6}}>"御社のお客様が望む品質を、<br/>弊社の職人技術でお届けします"</p>
+        <div style={{ position:'relative', overflow:'hidden', height: mob ? 280 : 'auto', flex: mob ? 'none' : 1 }}>
+          <img src="/images/img-060.jpg" alt="品質の到達点" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', objectPosition:'center top', filter:'brightness(0.9)' }} />
+          <div style={{ position:'absolute', bottom: mob ? 20 : 50, left: mob ? 16 : 32, right: mob ? 16 : 32 }}>
+            <div style={{ padding: mob ? '14px 16px' : '20px 24px', background:'rgba(26,22,18,0.85)', backdropFilter:'blur(8px)', borderLeft:`3px solid ${C.gold}` }}>
+              <p style={{ fontFamily:"'Cormorant Garamond'", fontSize: mob ? 13 : 15, color:C.goldLight, fontStyle:'italic', lineHeight:1.7 }}>"御社のお客様が望む品質を、<br />弊社の職人技術でお届けします"</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ══════════════════════════════════════════════════════
-          METHOD 1 — 非対面式受注
-          img-024, img-025 がまさに「サンプル展示」の実物
-          ════════════════════════════════════════════════════ */}
+      {/* ── METHOD 1 ──────────────────────────────────────────────────── */}
       <section ref={el=>sectionRefs.current['method1']=el} className="fi"
-        style={{...fi,minHeight:'100vh',position:'relative',overflow:'hidden',background:C.warmWhite}}>
-        <div style={{position:'absolute',right:0,top:0,bottom:0,width:'45%',opacity:.35}}><FabricScene/></div>
-        <div style={{position:'relative',zIndex:1,maxWidth:1200,margin:'0 auto',padding:'100px 80px'}}>
-          <SLabel en="Method 01"/>
+        style={{ position:'relative', overflow:'hidden', background:C.warmWhite }}>
+        {!mob && <div style={{ position:'absolute', right:0, top:0, bottom:0, width:'45%', opacity:.35 }}><FabricScene /></div>}
+        <div style={{ position:'relative', zIndex:1, maxWidth:1200, margin:'0 auto', padding: pad(mob) }}>
+          <SLabel en="Method 01" />
           <h2 style={hS(C.charcoal)}>非対面式受注</h2>
-          <p style={{fontSize:14,color:C.muted,marginBottom:12}}>フリーサイズデザインサンプルによる</p>
-          <div style={{width:40,height:2,background:C.gold,marginBottom:56}}/>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:60,alignItems:'start'}}>
-            {/* 左: フロー */}
+          <p style={{ fontSize: mob ? 12 : 14, color:C.muted, marginBottom: mob ? 8 : 12 }}>フリーサイズデザインサンプルによる</p>
+          <div style={{ width:40, height:2, background:C.gold, marginBottom: mob ? 32 : 56 }} />
+          <div style={{ display:'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: mob ? 32 : 60, alignItems:'start' }}>
+            <FlowChart steps={[{n:1,t:'サンプル展示',d:'S〜L対応サンプルを店内またはHP上に展示'},{n:2,t:'受注（丈調整）',d:'丈だけの簡単な調整で受注'},{n:3,t:'資材発注',d:'受注内容に基づいて資材を発注'},{n:4,t:'エイムローズで製作',d:'熟練職人が丁寧に製作'},{n:5,t:'納品',d:'材料が揃ってから1ヶ月半〜2ヶ月'}]} />
             <div>
-              <FlowChart steps={[{n:1,t:'サンプル展示',d:'S〜L対応サンプルを店内またはHP上に展示'},{n:2,t:'受注（丈調整）',d:'丈だけの簡単な調整で受注'},{n:3,t:'資材発注',d:'受注内容に基づいて資材を発注'},{n:4,t:'エイムローズで製作',d:'熟練職人が丁寧に製作'},{n:5,t:'納品',d:'材料が揃ってから1ヶ月半〜2ヶ月'}]}/>
-            </div>
-            {/* 右: 実際のサンプル写真 */}
-            <div>
-              <p style={{fontFamily:"'Cormorant Garamond'",fontSize:12,color:C.gold,letterSpacing:'0.3em',marginBottom:20}}>SAMPLE ITEMS</p>
-              {/* img-024: チェック柄ドレス */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:20}}>
-                <div style={{position:'relative',overflow:'hidden'}}>
-                  <img src="/images/img-024.jpg" alt="コート サンプル" style={{width:'100%',height:260,objectFit:'cover',objectPosition:'center',filter:'brightness(0.95)'}}/>
-                  <div style={{padding:'12px 14px',background:C.cream}}>
-                    <p style={{fontFamily:"'Noto Serif JP'",fontSize:13,color:C.charcoal,marginBottom:4}}>コート</p>
-                    <p style={{fontSize:11,color:C.muted}}>Sample ¥50,000</p>
-                    <p style={{fontSize:10,color:C.muted}}>通常 ¥100,000</p>
+              <p style={{ fontFamily:"'Cormorant Garamond'", fontSize:11, color:C.gold, letterSpacing:'0.3em', marginBottom: mob ? 12 : 20 }}>SAMPLE ITEMS</p>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: mob ? 10 : 12, marginBottom: mob ? 16 : 20 }}>
+                {[{src:'img-024.jpg',name:'コート',sample:'¥50,000',normal:'¥100,000'},{src:'img-025.jpg',name:'スーツ',sample:'¥50,000',normal:'¥100,000'}].map((item,i) => (
+                  <div key={i} style={{ overflow:'hidden' }}>
+                    <img src={`/images/${item.src}`} alt={item.name} style={{ width:'100%', height: mob ? 180 : 240, objectFit:'cover', display:'block' }} />
+                    <div style={{ padding: mob ? '10px 12px' : '12px 14px', background:C.cream }}>
+                      <p style={{ fontFamily:"'Noto Serif JP'", fontSize: mob ? 12 : 13, color:C.charcoal, marginBottom:3 }}>{item.name}</p>
+                      <p style={{ fontSize:11, color:C.muted }}>Sample {item.sample}</p>
+                      <p style={{ fontSize:10, color:C.muted }}>通常 {item.normal}</p>
+                    </div>
                   </div>
-                </div>
-                {/* img-025: グリーントレンチ */}
-                <div style={{position:'relative',overflow:'hidden'}}>
-                  <img src="/images/img-025.jpg" alt="スーツ サンプル" style={{width:'100%',height:260,objectFit:'cover',objectPosition:'center',filter:'brightness(0.95)'}}/>
-                  <div style={{padding:'12px 14px',background:C.cream}}>
-                    <p style={{fontFamily:"'Noto Serif JP'",fontSize:13,color:C.charcoal,marginBottom:4}}>スーツ</p>
-                    <p style={{fontSize:11,color:C.muted}}>Sample ¥50,000</p>
-                    <p style={{fontSize:10,color:C.muted}}>通常 ¥100,000</p>
-                  </div>
-                </div>
+                ))}
               </div>
-              <div style={{padding:'16px 20px',background:`${C.gold}10`,border:`1px solid ${C.gold}30`}}>
-                <p style={{fontSize:12,color:C.charcoal,lineHeight:2}}>✦ 全てS〜L対応 ／ 生地はご準備ください<br/>✦ 丈調整 +¥1,000/箇所 ／ 柄合わせ +¥10,000<br/>✦ 販売価格は御社で自由設定</p>
+              <div style={{ padding: mob ? '14px 16px' : '16px 20px', background:`${C.gold}10`, border:`1px solid ${C.gold}30` }}>
+                <p style={{ fontSize: mob ? 11 : 12, color:C.charcoal, lineHeight:2.1 }}>✦ 全てS〜L対応 ／ 生地はご準備ください<br />✦ 丈調整 +¥1,000/箇所 ／ 柄合わせ +¥10,000<br />✦ 販売価格は御社で自由設定</p>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ══════════════════════════════════════════════════════
-          METHOD 2 — フルオーダー対面式受注
-          img-028, img-029 = フルオーダー完成品の着用イメージ
-          ════════════════════════════════════════════════════ */}
+      {/* ── METHOD 2 ──────────────────────────────────────────────────── */}
       <section ref={el=>sectionRefs.current['method2']=el} className="fi"
-        style={{...fi,minHeight:'100vh',position:'relative',overflow:'hidden',background:C.charcoal}}>
-        <FabricScene dark/>
-        <div style={{position:'absolute',inset:0,background:'rgba(13,12,10,0.78)',pointerEvents:'none'}}/>
-        <div style={{position:'relative',zIndex:1,maxWidth:1200,margin:'0 auto',padding:'100px 80px'}}>
-          <SLabel en="Method 02"/>
+        style={{ position:'relative', overflow:'hidden', background:C.charcoal }}>
+        <FabricScene dark />
+        <div style={{ position:'absolute', inset:0, background:'rgba(13,12,10,0.78)', pointerEvents:'none' }} />
+        <div style={{ position:'relative', zIndex:1, maxWidth:1200, margin:'0 auto', padding: pad(mob) }}>
+          <SLabel en="Method 02" />
           <h2 style={hS(C.ivory)}>フルオーダー対面式受注</h2>
-          <div style={{width:40,height:2,background:C.gold,marginBottom:60}}/>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:60,alignItems:'start'}}>
-            {/* 左: フロー + 料金 */}
-            <div>
-              <FlowChart dark steps={[{n:1,t:'お客様からの依頼',d:'フルオーダーの依頼を受けます'},{n:2,t:'エイムローズに出張依頼',d:'オーダー日を決定'},{n:3,t:'オーダー当日',d:'御社に訪問し、共同で受注'},{n:4,t:'仮縫い 1〜2回',d:'お客様の体型に合わせて調整'},{n:5,t:'エイムローズで製作',d:'納期は2〜3ヶ月'},{n:6,t:'納品',d:'完成した高品質なフルオーダー製品をお届け'}]}/>
-              <div style={{marginTop:24,padding:'24px 28px',background:'rgba(24,22,20,0.9)',borderLeft:`3px solid ${C.gold}`}}>
-                <p style={{fontSize:11,color:C.gold,letterSpacing:'0.1em',marginBottom:12}}>出張費（受注日・仮縫い日含む）</p>
-                {[['近距離（20km以内）','¥10,000 + 交通費'],['中距離（〜50km）','¥20,000 + 交通費'],['長距離（50km以上）','¥40,000 + 交通費']].map(([d,p],i)=>(
-                  <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:`1px solid ${C.border}`,fontSize:13}}>
-                    <span style={{color:'#9a9080'}}>{d}</span><span style={{color:C.goldLight}}>{p}</span>
+          <div style={{ width:40, height:2, background:C.gold, marginBottom: mob ? 32 : 60 }} />
+          <div style={{ display:'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: mob ? 32 : 60 }}>
+            <FlowChart dark steps={[{n:1,t:'お客様からの依頼',d:'フルオーダーの依頼を受けます'},{n:2,t:'エイムローズに出張依頼',d:'オーダー日を決定'},{n:3,t:'オーダー当日',d:'御社に訪問し、共同で受注'},{n:4,t:'仮縫い 1〜2回',d:'お客様の体型に合わせて調整'},{n:5,t:'エイムローズで製作',d:'納期は2〜3ヶ月'},{n:6,t:'納品',d:'完成した高品質なフルオーダー製品をお届け'}]} />
+            <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+              <div style={{ padding: mob ? '20px 18px' : '28px 32px', background:'rgba(24,22,20,0.9)', borderLeft:`3px solid ${C.gold}` }}>
+                <p style={{ fontSize:10, color:C.gold, letterSpacing:'0.1em', marginBottom:12 }}>出張費（受注日・仮縫い日含む）</p>
+                {[['近距離（20km以内）','¥10,000 + 交通費'],['中距離（〜50km）','¥20,000 + 交通費'],['長距離（50km以上）','¥40,000 + 交通費']].map(([d,p],i) => (
+                  <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:`1px solid ${C.border}`, fontSize: mob ? 12 : 13 }}>
+                    <span style={{ color:'#9a9080' }}>{d}</span><span style={{ color:C.goldLight }}>{p}</span>
                   </div>
                 ))}
               </div>
-            </div>
-            {/* 右: 完成品着用写真ギャラリー */}
-            <div>
-              <p style={{fontFamily:"'Cormorant Garamond'",fontSize:12,color:C.gold,letterSpacing:'0.3em',marginBottom:20}}>FINISHED WORKS</p>
-              {/* img-028: ネイビーコート着用 */}
-              <div style={{position:'relative',overflow:'hidden',marginBottom:12}}>
-                <img src="/images/img-028.jpg" alt="フルオーダー完成品" style={{width:'100%',height:260,objectFit:'cover',objectPosition:'center top',filter:'brightness(0.9)'}}/>
-                <div style={{position:'absolute',bottom:0,left:0,right:0,padding:'16px',background:'linear-gradient(0deg,rgba(13,12,10,0.9),transparent)'}}>
-                  <span style={{fontSize:12,color:C.goldLight,letterSpacing:'0.05em'}}>フルオーダーコート — 完成品</span>
-                </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                {[{src:'img-028.jpg',label:'フルオーダーコート'},{src:'img-029.jpg',label:'フルオーダースーツ'}].map((item,i) => (
+                  <div key={i} style={{ position:'relative', overflow:'hidden', height: mob ? 160 : 200 }}>
+                    <img src={`/images/${item.src}`} alt={item.label} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center top', filter:'brightness(0.9)' }} />
+                    <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'10px 10px', background:'linear-gradient(0deg,rgba(13,12,10,0.9),transparent)' }}>
+                      <span style={{ fontSize:10, color:C.goldLight }}>{item.label}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
-              {/* img-029: ピンクスーツ着用 */}
-              <div style={{position:'relative',overflow:'hidden'}}>
-                <img src="/images/img-029.jpg" alt="フルオーダースーツ" style={{width:'100%',height:240,objectFit:'cover',objectPosition:'center',filter:'brightness(0.9)'}}/>
-                <div style={{position:'absolute',bottom:0,left:0,right:0,padding:'16px',background:'linear-gradient(0deg,rgba(13,12,10,0.9),transparent)'}}>
-                  <span style={{fontSize:12,color:C.goldLight,letterSpacing:'0.05em'}}>フルオーダースーツ — 完成品</span>
-                </div>
-              </div>
-              <div style={{marginTop:16,padding:'16px 20px',background:`${C.gold}10`,border:`1px solid ${C.gold}30`}}>
-                <p style={{fontSize:12,color:C.textLight,lineHeight:2}}>✦ ご紹介リピート時に<strong style={{color:C.goldLight}}>御社に20% キャッシュバック</strong></p>
+              <div style={{ padding: mob ? '14px 16px' : '16px 20px', background:`${C.gold}10`, border:`1px solid ${C.gold}30` }}>
+                <p style={{ fontSize: mob ? 12 : 13, color:C.textLight, lineHeight:2 }}>✦ ご紹介リピート時に<strong style={{ color:C.goldLight }}>御社に20%キャッシュバック</strong></p>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ══════════════════════════════════════════════════════
-          PRICING — 料金表
-          img-044: 高品質ワンピースで「この価値に見合う価格」を表現
-          右にGemScene
-          ════════════════════════════════════════════════════ */}
+      {/* ── PRICING ───────────────────────────────────────────────────── */}
       <section ref={el=>sectionRefs.current['pricing']=el} className="fi"
-        style={{...fi,minHeight:'100vh',display:'grid',gridTemplateColumns:'3fr 2fr',overflow:'hidden',background:C.warmWhite}}>
-        {/* 左: 料金表 */}
-        <div style={{padding:'100px 80px',display:'flex',flexDirection:'column',justifyContent:'center'}}>
-          <SLabel en="Pricing"/>
+        style={{ display:'flex', flexDirection: mob ? 'column' : 'row', overflow:'hidden', background:C.warmWhite }}>
+        <div style={{ padding: pad(mob), display:'flex', flexDirection:'column', justifyContent:'center', flex: mob ? 'none' : 3 }}>
+          <SLabel en="Pricing" />
           <h2 style={hS(C.charcoal)}>フルオーダー料金</h2>
-          <div style={{width:40,height:2,background:C.gold,marginBottom:48}}/>
-          <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,background:'rgba(250,247,242,0.97)'}}>
-            <thead><tr style={{background:C.charcoal,color:C.ivory}}>
-              <th style={thS}>アイテム</th><th style={thS}>パターン</th><th style={thS}>製作</th>
-            </tr></thead>
-            <tbody>
-              {[['コート','¥55,000〜','¥90,000〜'],['ジャケット・ブルゾン','¥50,000〜','¥70,000〜'],['ワンピース','¥45,000〜','¥60,000〜'],['パンツ・スカート','¥35,000〜','¥30,000〜'],['シャツ','¥35,000〜','¥35,000〜']].map(([n,p,m],i)=>(
-                <tr key={i} style={{borderBottom:`1px solid ${C.cream}`}}>
-                  <td style={tdS}>{n}</td>
-                  <td style={{...tdS,color:C.goldDark,fontFamily:"'Cormorant Garamond'",fontSize:16}}>{p}</td>
-                  <td style={{...tdS,color:C.goldDark,fontFamily:"'Cormorant Garamond'",fontSize:16}}>{m}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div style={{marginTop:20,padding:'18px 24px',background:`${C.gold}10`,border:`1px solid ${C.gold}30`}}>
-            <p style={{fontSize:12,color:C.charcoal,lineHeight:2.2}}>✦ 革の場合 別途 ¥20,000 ／ 柄合わせ 別途 ¥10,000<br/>✦ 2着目以降、同パターンはパターン代不要<br/>✦ <strong>ご紹介リピート → 御社に20%キャッシュバック</strong></p>
+          <div style={{ width:40, height:2, background:C.gold, marginBottom: mob ? 28 : 48 }} />
+          {/* テーブルは横スクロール可能なラッパーで包む */}
+          <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+            <table style={{ width:'100%', minWidth: mob ? 300 : 'auto', borderCollapse:'collapse', fontSize: mob ? 12 : 13, background:'rgba(250,247,242,0.97)' }}>
+              <thead><tr style={{ background:C.charcoal, color:C.ivory }}>
+                <th style={{ ...thS, fontSize: mob ? 10 : 11 }}>アイテム</th>
+                <th style={{ ...thS, fontSize: mob ? 10 : 11 }}>パターン</th>
+                <th style={{ ...thS, fontSize: mob ? 10 : 11 }}>製作</th>
+              </tr></thead>
+              <tbody>
+                {[['コート','¥55,000〜','¥90,000〜'],['ジャケット・ブルゾン','¥50,000〜','¥70,000〜'],['ワンピース','¥45,000〜','¥60,000〜'],['パンツ・スカート','¥35,000〜','¥30,000〜'],['シャツ','¥35,000〜','¥35,000〜']].map(([n,p,m],i) => (
+                  <tr key={i} style={{ borderBottom:`1px solid ${C.cream}` }}>
+                    <td style={{ ...tdS, fontSize: mob ? 12 : 13 }}>{n}</td>
+                    <td style={{ ...tdS, color:C.goldDark, fontFamily:"'Cormorant Garamond'", fontSize: mob ? 15 : 16 }}>{p}</td>
+                    <td style={{ ...tdS, color:C.goldDark, fontFamily:"'Cormorant Garamond'", fontSize: mob ? 15 : 16 }}>{m}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ marginTop: mob ? 16 : 20, padding: mob ? '14px 16px' : '18px 24px', background:`${C.gold}10`, border:`1px solid ${C.gold}30` }}>
+            <p style={{ fontSize: mob ? 11 : 12, color:C.charcoal, lineHeight:2.2 }}>✦ 革の場合 別途 ¥20,000 ／ 柄合わせ 別途 ¥10,000<br />✦ 2着目以降、同パターンはパターン代不要<br />✦ <strong>ご紹介リピート → 御社に20%キャッシュバック</strong></p>
           </div>
         </div>
-        {/* 右: img-044 + GemScene */}
-        <div style={{position:'relative',overflow:'hidden',background:C.charcoal}}>
-          <img src="/images/img-044.jpg" alt="高品質ワンピース" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',objectPosition:'center top',opacity:.6,filter:'brightness(0.75)'}}/>
-          <div style={{position:'absolute',inset:0,opacity:.5}}><GemScene/></div>
-          <div style={{position:'absolute',inset:0,background:'linear-gradient(180deg,rgba(13,12,10,0.3) 0%,rgba(13,12,10,0.6) 100%)'}}/>
-          <div style={{position:'absolute',bottom:48,left:24,right:24}}>
-            <div style={{padding:'16px 20px',background:'rgba(13,12,10,0.8)',borderTop:`2px solid ${C.gold}`}}>
-              <p style={{fontFamily:"'Cormorant Garamond'",fontSize:14,color:C.goldLight,fontStyle:'italic'}}>すべてを一から仕立てる。<br/>それがエイムローズの仕事。</p>
+        <div style={{ position:'relative', overflow:'hidden', height: mob ? 220 : 'auto', flex: mob ? 'none' : 2, background:C.charcoal }}>
+          <img src="/images/img-044.jpg" alt="高品質" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', objectPosition:'center top', opacity:.6, filter:'brightness(0.75)' }} />
+          <div style={{ position:'absolute', inset:0, opacity:.5 }}><GemScene /></div>
+          <div style={{ position:'absolute', inset:0, background:'linear-gradient(180deg,rgba(13,12,10,0.3) 0%,rgba(13,12,10,0.6) 100%)' }} />
+          <div style={{ position:'absolute', bottom: mob ? 20 : 48, left: mob ? 16 : 24, right: mob ? 16 : 24 }}>
+            <div style={{ padding: mob ? '12px 14px' : '16px 20px', background:'rgba(13,12,10,0.8)', borderTop:`2px solid ${C.gold}` }}>
+              <p style={{ fontFamily:"'Cormorant Garamond'", fontSize: mob ? 13 : 14, color:C.goldLight, fontStyle:'italic', lineHeight:1.6 }}>すべてを一から仕立てる。<br />それがエイムローズの仕事。</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ══════════════════════════════════════════════════════
-          WHOLESALE — 卸販売
-          img-071: ポケットチーフのアップ（卸商品の代表格）
-          img-033, img-043: アパレル商品ラインナップ
-          ════════════════════════════════════════════════════ */}
+      {/* ── WHOLESALE ─────────────────────────────────────────────────── */}
       <section ref={el=>sectionRefs.current['wholesale']=el} className="fi"
-        style={{...fi,minHeight:'80vh',background:C.cream}}>
-        <div style={{maxWidth:1200,margin:'0 auto',padding:'100px 80px'}}>
-          <SLabel en="Wholesale"/>
+        style={{ background:C.cream }}>
+        <div style={{ maxWidth:1200, margin:'0 auto', padding: pad(mob) }}>
+          <SLabel en="Wholesale" />
           <h2 style={hS(C.charcoal)}>アクセサリー卸販売</h2>
-          <div style={{width:40,height:2,background:C.gold,marginBottom:56}}/>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:48,alignItems:'start'}}>
-            {/* 左: アクセサリー（img-071メイン） */}
+          <div style={{ width:40, height:2, background:C.gold, marginBottom: mob ? 32 : 56 }} />
+          <div style={{ display:'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr', gap: mob ? 32 : 48, alignItems:'start' }}>
             <div>
-              <p style={{fontFamily:"'Cormorant Garamond'",fontSize:12,color:C.gold,letterSpacing:'0.3em',marginBottom:16}}>ACCESSORIES</p>
-              <div style={{position:'relative',overflow:'hidden',marginBottom:20}}>
-                <img src="/images/img-071.jpg" alt="ポケットチーフ" style={{width:'100%',height:280,objectFit:'cover',objectPosition:'center',filter:'brightness(0.95)'}}/>
+              <p style={{ fontFamily:"'Cormorant Garamond'", fontSize:11, color:C.gold, letterSpacing:'0.3em', marginBottom: mob ? 12 : 16 }}>ACCESSORIES</p>
+              <div style={{ position:'relative', overflow:'hidden', marginBottom: mob ? 14 : 20 }}>
+                <img src="/images/img-071.jpg" alt="ポケットチーフ" style={{ width:'100%', height: mob ? 200 : 260, objectFit:'cover', display:'block' }} />
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:16}}>
-                {[{name:'ポケットチーフ',detail:'1柄: ¥2,900→¥1,450\n2柄: ¥3,500→¥1,750'},
-                  {name:'ミニネクタイ',detail:'定価 ¥3,900\n卸値 ¥1,950'},
-                  {name:'ミニ蝶ネクタイ',detail:'定価 ¥3,900\n卸値 ¥1,950'}
-                ].map((item,i)=>(
-                  <div key={i} style={{padding:'16px',background:C.warmWhite,borderTop:`2px solid ${C.gold}`}}>
-                    <p style={{fontFamily:"'Noto Serif JP'",fontSize:12,color:C.charcoal,marginBottom:8}}>{item.name}</p>
-                    <pre style={{fontSize:11,color:C.muted,whiteSpace:'pre-wrap',lineHeight:1.9,fontFamily:'inherit'}}>{item.detail}</pre>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap: mob ? 8 : 14 }}>
+                {[{name:'ポケットチーフ',detail:'1柄: ¥1,450\n2柄: ¥1,750'},{name:'ミニネクタイ',detail:'¥1,950'},{name:'ミニ蝶ネクタイ',detail:'¥1,950'}].map((item,i) => (
+                  <div key={i} style={{ padding: mob ? '12px 10px' : '16px', background:C.warmWhite, borderTop:`2px solid ${C.gold}` }}>
+                    <p style={{ fontFamily:"'Noto Serif JP'", fontSize: mob ? 10 : 12, color:C.charcoal, marginBottom:6 }}>{item.name}</p>
+                    <pre style={{ fontSize: mob ? 10 : 11, color:C.muted, whiteSpace:'pre-wrap', lineHeight:1.8, fontFamily:'inherit' }}>{item.detail}</pre>
                   </div>
                 ))}
               </div>
-              <p style={{marginTop:16,fontSize:11,color:C.muted}}>※税別 ／ 最低発注 ¥10,000 ／ 送料別途</p>
+              <p style={{ marginTop:12, fontSize:10, color:C.muted }}>※税別 ／ 最低発注 ¥10,000 ／ 送料別途</p>
             </div>
-            {/* 右: アパレル卸（img-033, img-043） */}
             <div>
-              <p style={{fontFamily:"'Cormorant Garamond'",fontSize:12,color:C.gold,letterSpacing:'0.3em',marginBottom:16}}>APPAREL LINE</p>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:20}}>
-                <div style={{overflow:'hidden'}}>
-                  <img src="/images/img-033.jpg" alt="ブラウス" style={{width:'100%',height:220,objectFit:'cover',objectPosition:'center top',filter:'brightness(0.92)'}}/>
-                  <div style={{padding:'10px 14px',background:C.warmWhite}}>
-                    <p style={{fontSize:12,color:C.charcoal}}>ブラウス</p>
-                    <p style={{fontSize:11,color:C.muted}}>Sample ¥25,000〜</p>
+              <p style={{ fontFamily:"'Cormorant Garamond'", fontSize:11, color:C.gold, letterSpacing:'0.3em', marginBottom: mob ? 12 : 16 }}>APPAREL LINE</p>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: mob ? 10 : 12, marginBottom: mob ? 14 : 20 }}>
+                {[{src:'img-033.jpg',name:'ブラウス',price:'Sample ¥25,000〜'},{src:'img-043.jpg',name:'スカパン',price:'Sample ¥20,000〜'}].map((item,i) => (
+                  <div key={i} style={{ overflow:'hidden' }}>
+                    <img src={`/images/${item.src}`} alt={item.name} style={{ width:'100%', height: mob ? 160 : 200, objectFit:'cover', display:'block' }} />
+                    <div style={{ padding: mob ? '8px 10px' : '10px 14px', background:C.warmWhite }}>
+                      <p style={{ fontSize: mob ? 11 : 12, color:C.charcoal }}>{item.name}</p>
+                      <p style={{ fontSize: mob ? 10 : 11, color:C.muted }}>{item.price}</p>
+                    </div>
                   </div>
-                </div>
-                <div style={{overflow:'hidden'}}>
-                  <img src="/images/img-043.jpg" alt="スカパン" style={{width:'100%',height:220,objectFit:'cover',objectPosition:'center',filter:'brightness(0.92)'}}/>
-                  <div style={{padding:'10px 14px',background:C.warmWhite}}>
-                    <p style={{fontSize:12,color:C.charcoal}}>スカパン</p>
-                    <p style={{fontSize:11,color:C.muted}}>Sample ¥20,000〜</p>
-                  </div>
-                </div>
+                ))}
               </div>
-              <div style={{padding:'20px 24px',background:`${C.gold}10`,border:`1px solid ${C.gold}30`}}>
-                <p style={{fontSize:13,color:C.charcoal,lineHeight:2}}>生地持ち込みのチーフ加工賃<br/>1枚 ¥3,000 ／ 10枚〜 ¥1,000/枚</p>
+              <div style={{ padding: mob ? '14px 16px' : '20px 24px', background:`${C.gold}10`, border:`1px solid ${C.gold}30` }}>
+                <p style={{ fontSize: mob ? 12 : 13, color:C.charcoal, lineHeight:2 }}>生地持ち込みのチーフ加工賃<br />1枚 ¥3,000 ／ 10枚〜 ¥1,000/枚</p>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ══════════════════════════════════════════════════════
-          STEPS — 今すぐ始められます
-          img-054: マイクを持つエグゼクティブ = 提携先のターゲット像
-          ════════════════════════════════════════════════════ */}
+      {/* ── STEPS ─────────────────────────────────────────────────────── */}
       <section ref={el=>sectionRefs.current['steps']=el} className="fi"
-        style={{...fi,minHeight:'80vh',position:'relative',overflow:'hidden',background:C.charcoal}}>
-        {/* img-054 背景 */}
-        <img src="/images/img-054.jpg" alt="経営者" style={{position:'absolute',right:0,top:0,width:'40%',height:'100%',objectFit:'cover',objectPosition:'center top',opacity:.5,filter:'brightness(0.6)'}}/>
-        <div style={{position:'absolute',right:0,top:0,width:'50%',height:'100%',background:'linear-gradient(270deg,rgba(13,12,10,0.2) 0%,rgba(13,12,10,0.95) 50%)',pointerEvents:'none'}}/>
-        <div style={{position:'relative',zIndex:1,maxWidth:1200,margin:'0 auto',padding:'100px 80px'}}>
-          <SLabel en="Getting Started"/>
+        style={{ position:'relative', overflow:'hidden', background:C.charcoal }}>
+        {!mob && <img src="/images/img-054.jpg" alt="" style={{ position:'absolute', right:0, top:0, width:'40%', height:'100%', objectFit:'cover', objectPosition:'center top', opacity:.5, filter:'brightness(0.6)' }} />}
+        {!mob && <div style={{ position:'absolute', right:0, top:0, width:'50%', height:'100%', background:'linear-gradient(270deg,rgba(13,12,10,0.2) 0%,rgba(13,12,10,0.95) 50%)', pointerEvents:'none' }} />}
+        <div style={{ position:'relative', zIndex:1, maxWidth:1200, margin:'0 auto', padding: pad(mob) }}>
+          <SLabel en="Getting Started" />
           <h2 style={hS(C.ivory)}>今すぐ始められます</h2>
-          <div style={{width:40,height:2,background:C.gold,marginBottom:60}}/>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:2,maxWidth:900}}>
+          <div style={{ width:40, height:2, background:C.gold, marginBottom: mob ? 32 : 60 }} />
+          <div style={{ display:'grid', gridTemplateColumns: mob ? '1fr' : '1fr 1fr 1fr', gap: mob ? 12 : 2, maxWidth: mob ? '100%' : 900 }}>
             {[{n:'01',title:'提携方法1の場合',desc:'サンプル製作を行い、その後、受注方法の指導をさせていただきます。'},
               {n:'02',title:'提携方法2の場合',desc:'特別な準備は不要です。お客様からのフルオーダー依頼があった際に随時対応いたします。'},
               {n:'03',title:'契約手続き',desc:'提携内容の詳細について協議し、双方の合意のもと契約を締結いたします。'}
-            ].map((item,i)=>(
-              <div key={i} style={{padding:'40px 28px',background:'rgba(24,22,20,0.9)'}}>
-                <div style={{fontFamily:"'Cormorant Garamond'",fontSize:54,fontWeight:300,color:`${C.gold}22`,lineHeight:1,marginBottom:16}}>{item.n}</div>
-                <h3 style={{fontFamily:"'Noto Serif JP'",fontSize:14,color:C.ivory,marginBottom:12}}>{item.title}</h3>
-                <div style={{width:20,height:1,background:C.gold,marginBottom:12}}/>
-                <p style={{fontSize:13,color:'#8a8070',lineHeight:1.9}}>{item.desc}</p>
+            ].map((item,i) => (
+              <div key={i} style={{ padding: mob ? '20px 18px' : '44px 32px', background:'rgba(24,22,20,0.9)', borderLeft: mob ? `3px solid ${C.gold}` : 'none', borderTop: mob ? 'none' : `2px solid ${C.gold}` }}>
+                {!mob && <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:54, fontWeight:300, color:`${C.gold}22`, lineHeight:1, marginBottom:16 }}>{item.n}</div>}
+                <h3 style={{ fontFamily:"'Noto Serif JP'", fontSize: mob ? 14 : 15, color:C.ivory, marginBottom:10 }}>{mob ? item.n + '. ' : ''}{item.title}</h3>
+                <div style={{ width:20, height:1, background:C.gold, marginBottom:10 }} />
+                <p style={{ fontSize: mob ? 12 : 13, color:'#8a8070', lineHeight:1.9 }}>{item.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ══════════════════════════════════════════════════════
-          CONTACT — 締め
-          RoseSceneをベースにimg-083ミシン写真を薄く重ねる
-          ════════════════════════════════════════════════════ */}
+      {/* ── CONTACT ───────────────────────────────────────────────────── */}
       <section ref={el=>sectionRefs.current['contact']=el} className="fi"
-        style={{...fi,minHeight:'80vh',position:'relative',overflow:'hidden',display:'flex',alignItems:'center',justifyContent:'center',background:C.charcoal}}>
-        {/* img-083 ミシン: 職人で締める */}
-        <img src="/images/img-083.jpg" alt="職人の技" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',objectPosition:'center',opacity:.15,filter:'brightness(0.5) sepia(0.5)'}}/>
-        <RoseScene/>
-        <div style={{position:'absolute',inset:0,background:'radial-gradient(ellipse at center,rgba(13,12,10,0.15) 0%,rgba(13,12,10,0.9) 65%)',pointerEvents:'none'}}/>
-        <div style={{position:'relative',zIndex:1,textAlign:'center',maxWidth:680,padding:'80px 40px'}}>
-          <SLabel en="Contact"/>
-          <h2 style={{...hS(C.ivory),marginBottom:44}}>ご質問・ご相談はお気軽に</h2>
-          <div style={{padding:'44px 56px',background:'rgba(255,255,255,0.05)',border:`1px solid ${C.gold}30`,backdropFilter:'blur(10px)'}}>
-            <p style={{fontFamily:"'Cormorant Garamond'",fontSize:22,color:C.goldLight,marginBottom:6}}>株式会社 aim-rose（エイムローズ）</p>
-            <div style={{width:40,height:1,background:C.gold,margin:'0 auto 28px'}}/>
-            {[['住所','〒542-0081 大阪市中央区南船場2-2-28'],['','ジェイ・プライド順慶ビル205'],['TEL','06-6261-7373'],['FAX','06-6261-7372'],['HP','https://aim-rose-order.com/']].map(([l,v],i)=>(
-              <div key={i} style={{display:'flex',justifyContent:'center',gap:28,marginBottom:9,fontSize:13}}>
-                <span style={{color:C.gold,minWidth:40,textAlign:'right'}}>{l}</span>
-                <span style={{color:'#c8bfb0'}}>{v}</span>
+        style={{ position:'relative', overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center', background:C.charcoal, minHeight: mob ? 'auto' : '80vh' }}>
+        <img src="/images/img-083.jpg" alt="" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', opacity:.15, filter:'brightness(0.5) sepia(0.5)' }} />
+        <RoseScene />
+        <div style={{ position:'absolute', inset:0, background:'radial-gradient(ellipse at center,rgba(13,12,10,0.2) 0%,rgba(13,12,10,0.9) 65%)', pointerEvents:'none' }} />
+        <div style={{ position:'relative', zIndex:1, textAlign:'center', maxWidth:680, padding: mob ? '60px 24px' : '80px 40px', width:'100%' }}>
+          <SLabel en="Contact" />
+          <h2 style={{ ...hS(C.ivory), marginBottom: mob ? 28 : 44 }}>ご質問・ご相談はお気軽に</h2>
+          <div style={{ padding: mob ? '28px 20px' : '44px 56px', background:'rgba(255,255,255,0.05)', border:`1px solid ${C.gold}30` }}>
+            <p style={{ fontFamily:"'Cormorant Garamond'", fontSize: mob ? 18 : 22, color:C.goldLight, marginBottom:6 }}>株式会社 aim-rose（エイムローズ）</p>
+            <div style={{ width:40, height:1, background:C.gold, margin:'0 auto', marginBottom: mob ? 20 : 28 }} />
+            {[['住所','〒542-0081 大阪市中央区南船場2-2-28'],['','ジェイ・プライド順慶ビル205'],['TEL','06-6261-7373'],['FAX','06-6261-7372'],['HP','https://aim-rose-order.com/']].map(([l,v],i) => (
+              <div key={i} style={{ display:'flex', justifyContent: mob ? 'flex-start' : 'center', gap: mob ? 12 : 28, marginBottom:8, fontSize: mob ? 12 : 13, flexWrap:'wrap' }}>
+                <span style={{ color:C.gold, minWidth: mob ? 36 : 40, textAlign:'right', flexShrink:0 }}>{l}</span>
+                <span style={{ color:'#c8bfb0', textAlign:'left' }}>{v}</span>
               </div>
             ))}
           </div>
-          <p style={{marginTop:24,fontSize:13,color:C.textDim}}>提携店様専用公式ラインもございます</p>
+          <p style={{ marginTop: mob ? 18 : 24, fontSize: mob ? 12 : 13, color:C.textDim }}>提携店様専用公式ラインもございます</p>
         </div>
       </section>
-
     </div>
   )
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// PRESENTER VIEW — 3カラム構成
+// PRESENTER VIEW — モバイル対応版
 // ════════════════════════════════════════════════════════════════════════════
 function useElapsedTimer() {
   const [elapsed, setElapsed] = useState(0)
@@ -1057,19 +753,34 @@ function useElapsedTimer() {
   }, [])
   const mm = String(Math.floor(elapsed / 60)).padStart(2, '0')
   const ss = String(elapsed % 60).padStart(2, '0')
-  return `${mm}:${ss}`
+  return { elapsed, display: `${mm}:${ss}` }
 }
 
 function PresenterView() {
+  const mob = useIsMobile()
   const [current, setCurrent] = useState(0)
   const [bantChecked, setBantChecked] = useState({})
   const [openObj, setOpenObj] = useState(null)
-  const [noteOpen, setNoteOpen] = useState(true)
+  const [rightOpen, setRightOpen] = useState(false)  // モバイルで右パネルをドロワー化
   const sendSync = useSyncSend()
-  const elapsed = useElapsedTimer()
+  const { elapsed, display: timerDisplay } = useElapsedTimer()
   const sec = P_SECTIONS[current]
   const nextSec = P_SECTIONS[current + 1] || null
   const progress = (current / (P_SECTIONS.length - 1)) * 100
+  const totalMin = P_SECTIONS.reduce((s, p) => s + p.min, 0)
+
+  // スワイプ対応
+  const touchStartX = useRef(null)
+  const onTouchStart = (e) => { touchStartX.current = e.touches[0].clientX }
+  const onTouchEnd = (e) => {
+    if (touchStartX.current === null) return
+    const dx = e.changedTouches[0].clientX - touchStartX.current
+    if (Math.abs(dx) > 60) {
+      if (dx < 0) setCurrent(c => Math.min(c + 1, P_SECTIONS.length - 1))
+      else setCurrent(c => Math.max(c - 1, 0))
+    }
+    touchStartX.current = null
+  }
 
   useEffect(() => { if (sec.cs && CUSTOMER_MAP[sec.cs]) sendSync(CUSTOMER_MAP[sec.cs]) }, [current])
   useEffect(() => {
@@ -1083,103 +794,110 @@ function PresenterView() {
   const panelBg = '#111009'
   const panelBorder = '#252018'
 
+  const timerColor = elapsed < 1200 ? C.goldLight : elapsed < 1800 ? '#c0c060' : '#e07070'
+
   return (
-    <div style={{ background: C.bg, color: C.textLight, fontFamily: "'Noto Sans JP', sans-serif", minHeight: '100vh', display: 'flex', flexDirection: 'column', fontSize: 13 }}>
+    <div style={{ background: C.bg, color: C.textLight, fontFamily: "'Noto Sans JP', sans-serif", minHeight:'100svh', display:'flex', flexDirection:'column', fontSize: mob ? 12 : 13 }}
+      onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <GlobalStyles />
 
       {/* ── TOP BAR ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 20px', background: '#0a0908', borderBottom: `1px solid ${C.border}`, flexShrink: 0, gap: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ padding: '3px 10px', background: `${C.gold}22`, border: `1px solid ${C.gold}55`, color: C.goldLight, fontSize: 10, letterSpacing: '0.12em' }}>PRESENTER MODE</span>
-          <span style={{ color: C.textDim, fontSize: 11, fontFamily: "'Cormorant Garamond'", fontStyle: 'italic' }}>aim-rose 提携プレゼン</span>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding: mob ? '8px 12px' : '9px 20px', background:'#0a0908', borderBottom:`1px solid ${C.border}`, flexShrink:0, gap:8 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ padding:'2px 8px', background:`${C.gold}22`, border:`1px solid ${C.gold}55`, color:C.goldLight, fontSize: mob ? 9 : 10, letterSpacing:'0.1em', whiteSpace:'nowrap' }}>PRESENTER</span>
+          {!mob && <span style={{ color:C.textDim, fontSize:11, fontFamily:"'Cormorant Garamond'", fontStyle:'italic' }}>aim-rose</span>}
         </div>
-        {/* Timer */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ color: C.textDim, fontSize: 10 }}>経過</span>
-          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 16, color: elapsed.startsWith('0') && parseInt(elapsed.split(':')[0]) < 1 ? C.goldLight : parseInt(elapsed.split(':')[0]) >= 20 ? '#e07070' : '#70c070', letterSpacing: '0.1em' }}>{elapsed}</span>
-          <span style={{ color: C.textDim, fontSize: 10 }}>目安 {sec.min}分</span>
+        <div style={{ display:'flex', alignItems:'center', gap: mob ? 6 : 8 }}>
+          <span style={{ color:C.textDim, fontSize:9 }}>経過</span>
+          <span style={{ fontFamily:'monospace', fontSize: mob ? 15 : 16, color: timerColor, letterSpacing:'0.1em' }}>{timerDisplay}</span>
+          <span style={{ color:C.textDim, fontSize:9 }}>/{totalMin}分</span>
         </div>
-        <a href="/" target="_blank" rel="noopener noreferrer" style={{ padding: '5px 14px', background: 'none', border: `1px solid ${C.border}`, color: C.textMid, fontSize: 10, textDecoration: 'none' }}>↗ 顧客画面</a>
+        <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+          {mob && (
+            <button onClick={() => setRightOpen(!rightOpen)} style={{ padding:'4px 10px', background: rightOpen ? `${C.gold}20` : 'none', border:`1px solid ${rightOpen ? C.gold+'55' : C.border}`, color: rightOpen ? C.goldLight : C.textMid, fontSize:10, cursor:'pointer', borderRadius:2 }}>
+              {rightOpen ? '台本' : '補足'}
+            </button>
+          )}
+          <a href="/" target="_blank" rel="noopener noreferrer" style={{ padding:'4px 10px', background:'none', border:`1px solid ${C.border}`, color:C.textMid, fontSize:9, textDecoration:'none', whiteSpace:'nowrap' }}>↗ 顧客</a>
+        </div>
       </div>
 
-      {/* ── PROGRESS BAR ── */}
-      <div style={{ height: 2, background: '#1a1610', flexShrink: 0 }}>
-        <div style={{ height: '100%', width: `${progress}%`, background: `linear-gradient(90deg,${C.goldDark},${C.goldLight})`, transition: 'width 0.4s ease' }} />
+      {/* ── PROGRESS ── */}
+      <div style={{ height:2, background:'#1a1610', flexShrink:0 }}>
+        <div style={{ height:'100%', width:`${progress}%`, background:`linear-gradient(90deg,${C.goldDark},${C.goldLight})`, transition:'width 0.4s ease' }} />
       </div>
 
       {/* ── TAB NAV ── */}
-      <div style={{ display: 'flex', overflow: 'auto', background: '#0d0b08', borderBottom: `1px solid ${C.border}`, flexShrink: 0, scrollbarWidth: 'none' }}>
-        {P_SECTIONS.map((s, i) => (
-          <button key={s.id} onClick={() => setCurrent(i)} style={{ padding: '8px 14px', background: 'none', border: 'none', borderBottom: i === current ? `2px solid ${C.gold}` : '2px solid transparent', color: i === current ? C.goldLight : i < current ? '#4a3f30' : C.textDim, cursor: 'pointer', fontSize: 10, letterSpacing: '0.05em', whiteSpace: 'nowrap', transition: 'color 0.15s', position: 'relative' }}>
-            {i < current && <span style={{ position: 'absolute', top: 4, right: 4, width: 5, height: 5, borderRadius: '50%', background: '#3a6a3a' }} />}
+      <div style={{ display:'flex', overflow:'auto', background:'#0d0b08', borderBottom:`1px solid ${C.border}`, flexShrink:0, scrollbarWidth:'none' }}>
+        {P_SECTIONS.map((s,i) => (
+          <button key={s.id} onClick={() => setCurrent(i)} style={{ padding: mob ? '7px 10px' : '8px 14px', background:'none', border:'none', borderBottom: i===current ? `2px solid ${C.gold}` : '2px solid transparent', color: i===current ? C.goldLight : i<current ? '#4a3f30' : C.textDim, cursor:'pointer', fontSize: mob ? 9 : 10, letterSpacing:'0.04em', whiteSpace:'nowrap', transition:'color 0.15s', position:'relative' }}>
+            {i < current && <span style={{ position:'absolute', top:3, right:3, width:4, height:4, borderRadius:'50%', background:'#3a6a3a' }} />}
             {s.label}
           </button>
         ))}
       </div>
 
       {/* ── SECTION HEADER ── */}
-      <div style={{ padding: '12px 20px', background: panelBg, borderBottom: `1px solid ${panelBorder}`, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{ padding: '2px 9px', fontSize: 10, background: sec.cs ? `${C.gold}18` : '#152215', border: `1px solid ${sec.cs ? C.gold + '45' : '#2a4a2a'}`, color: sec.cs ? C.gold : '#4a8a4a' }}>
-          {sec.cs ? '🔗 顧客画面と連動' : '📋 カンペのみ'}
+      <div style={{ padding: mob ? '8px 12px' : '12px 20px', background: panelBg, borderBottom:`1px solid ${panelBorder}`, flexShrink:0, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+        <span style={{ padding:'2px 8px', fontSize:9, background: sec.cs?`${C.gold}18`:'#152215', border:`1px solid ${sec.cs?C.gold+'45':'#2a4a2a'}`, color: sec.cs?C.gold:'#4a8a4a', whiteSpace:'nowrap' }}>
+          {sec.cs ? '🔗 連動' : '📋 カンペ'}
         </span>
-        <span style={{ fontFamily: "'Cormorant Garamond'", fontSize: 20, color: C.ivory, fontStyle: 'italic' }}>{sec.label}</span>
-        <span style={{ color: C.textDim, fontSize: 10 }}>{current + 1} / {P_SECTIONS.length}</span>
-        <span style={{ marginLeft: 'auto', fontSize: 10, color: C.textDim }}>← → キーでも移動</span>
+        <span style={{ fontFamily:"'Cormorant Garamond'", fontSize: mob ? 17 : 20, color:C.ivory, fontStyle:'italic' }}>{sec.label}</span>
+        <span style={{ color:C.textDim, fontSize:9, marginLeft:'auto' }}>{current+1}/{P_SECTIONS.length} · 目安{sec.min}分</span>
       </div>
 
-      {/* ── MAIN 3-COLUMN AREA ── */}
-      <div style={{ flex: 1, overflow: 'hidden', display: 'grid', gridTemplateColumns: '1fr 300px', minHeight: 0 }}>
+      {/* ── MAIN CONTENT ── */}
+      <div style={{ flex:1, overflow:'hidden', display: mob ? 'block' : 'grid', gridTemplateColumns:'1fr 300px', minHeight:0 }}>
 
-        {/* ── LEFT: 台本 ── */}
-        <div style={{ overflow: 'auto', borderRight: `1px solid ${panelBorder}`, display: 'flex', flexDirection: 'column' }}>
+        {/* 左: 台本エリア（モバイルは補足表示中は非表示） */}
+        <div style={{ overflow:'auto', borderRight: mob ? 'none' : `1px solid ${panelBorder}`, display: mob && rightOpen ? 'none' : 'flex', flexDirection:'column', height: mob ? 'calc(100svh - 170px)' : 'auto' }}>
 
           {/* ゴール */}
-          <div style={{ padding: '12px 20px', background: '#0f1a0f', borderBottom: `1px solid #1a2a1a`, flexShrink: 0 }}>
-            <span style={{ fontSize: 10, color: '#4a8a4a', letterSpacing: '0.1em', marginRight: 8 }}>▶ このセクションのゴール</span>
-            <span style={{ fontSize: 12, color: '#90c890', lineHeight: 1.6 }}>{sec.goal}</span>
+          <div style={{ padding: mob ? '10px 14px' : '12px 20px', background:'#0f1a0f', borderBottom:`1px solid #1a2a1a`, flexShrink:0 }}>
+            <span style={{ fontSize: mob ? 9 : 10, color:'#4a8a4a', letterSpacing:'0.08em', marginRight:6 }}>▶ ゴール</span>
+            <span style={{ fontSize: mob ? 11 : 12, color:'#90c890', lineHeight:1.6 }}>{sec.goal}</span>
           </div>
 
           {/* 台本 */}
-          <div style={{ padding: '16px 20px', flex: 1 }}>
-            <div style={{ fontSize: 10, color: C.textDim, letterSpacing: '0.12em', marginBottom: 8 }}>台本テキスト</div>
-            <pre style={{ background: '#0a140a', border: `1px solid #182018`, padding: '18px 20px', fontSize: 13.5, lineHeight: 2.1, color: '#c8e8c8', whiteSpace: 'pre-wrap', fontFamily: "'Noto Sans JP'", margin: 0 }}>
+          <div style={{ padding: mob ? '12px 14px' : '16px 20px', flex:1 }}>
+            <div style={{ fontSize: mob ? 9 : 10, color:C.textDim, letterSpacing:'0.1em', marginBottom:7 }}>台本テキスト</div>
+            <pre style={{ background:'#0a140a', border:`1px solid #182018`, padding: mob ? '14px 14px' : '18px 20px', fontSize: mob ? 13 : 13.5, lineHeight:2.1, color:'#c8e8c8', whiteSpace:'pre-wrap', fontFamily:"'Noto Sans JP'", margin:0, borderRadius:2 }}>
               {sec.script}
             </pre>
           </div>
 
-          {/* BANTチェックリスト */}
+          {/* BANT */}
           {sec.bant && (
-            <div style={{ padding: '0 20px 16px' }}>
-              <div style={{ fontSize: 10, color: C.textDim, letterSpacing: '0.12em', marginBottom: 8, marginTop: 4 }}>BANTチェックリスト — ヒアリング中に確認</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ padding: mob ? '0 14px 14px' : '0 20px 16px' }}>
+              <div style={{ fontSize: mob ? 9 : 10, color:C.textDim, letterSpacing:'0.1em', marginBottom:7 }}>BANTチェックリスト</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
                 {BANT_ITEMS.map(item => (
-                  <label key={item.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '10px 14px', background: bantChecked[item.id] ? '#0d1f0d' : '#131108', border: `1px solid ${bantChecked[item.id] ? '#2a5a2a' : C.border}`, transition: 'all 0.2s' }}>
-                    <div style={{ width: 16, height: 16, border: `1px solid ${bantChecked[item.id] ? '#4a8a4a' : C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2, background: bantChecked[item.id] ? '#2a5a2a' : 'transparent' }}>
-                      {bantChecked[item.id] && <span style={{ color: '#7adc7a', fontSize: 9 }}>✓</span>}
+                  <label key={item.id} style={{ display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer', padding: mob ? '9px 12px' : '10px 14px', background: bantChecked[item.id]?'#0d1f0d':'#131108', border:`1px solid ${bantChecked[item.id]?'#2a5a2a':C.border}`, transition:'all 0.2s' }}>
+                    <div style={{ width:15, height:15, border:`1px solid ${bantChecked[item.id]?'#4a8a4a':C.border}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2, background: bantChecked[item.id]?'#2a5a2a':'transparent' }}>
+                      {bantChecked[item.id] && <span style={{ color:'#7adc7a', fontSize:9 }}>✓</span>}
                     </div>
-                    <div>
-                      <span style={{ fontSize: 12, lineHeight: 1.6, color: bantChecked[item.id] ? '#5a9a5a' : C.textMid, textDecoration: bantChecked[item.id] ? 'line-through' : 'none' }}>{item.label}</span>
-                    </div>
-                    <input type="checkbox" checked={!!bantChecked[item.id]} onChange={() => setBantChecked(p => ({ ...p, [item.id]: !p[item.id] }))} style={{ display: 'none' }} />
+                    <span style={{ fontSize: mob ? 12 : 12, lineHeight:1.6, color: bantChecked[item.id]?'#5a9a5a':C.textMid, textDecoration: bantChecked[item.id]?'line-through':'none' }}>{item.label}</span>
+                    <input type="checkbox" checked={!!bantChecked[item.id]} onChange={() => setBantChecked(p => ({...p,[item.id]:!p[item.id]}))} style={{ display:'none' }} />
                   </label>
                 ))}
               </div>
             </div>
           )}
 
-          {/* 切り返しトーク */}
+          {/* 切り返し */}
           {sec.objections && (
-            <div style={{ padding: '0 20px 20px' }}>
-              <div style={{ fontSize: 10, color: C.textDim, letterSpacing: '0.12em', marginBottom: 8 }}>切り返しトーク — クロージング時に使用</div>
-              {OBJECTIONS.map((obj, i) => (
-                <div key={i} style={{ marginBottom: 6 }}>
-                  <button onClick={() => setOpenObj(openObj === i ? null : i)} style={{ width: '100%', padding: '10px 14px', background: openObj === i ? '#1a1206' : '#131108', border: `1px solid ${openObj === i ? C.gold + '55' : C.border}`, color: openObj === i ? C.goldLight : C.textMid, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, fontFamily: "'Noto Sans JP'", textAlign: 'left', transition: 'all 0.2s' }}>
-                    <span>🚫 「{obj.trigger}」と言われたら</span>
-                    <span style={{ fontSize: 8 }}>{openObj === i ? '▲' : '▼'}</span>
+            <div style={{ padding: mob ? '0 14px 14px' : '0 20px 20px' }}>
+              <div style={{ fontSize: mob ? 9 : 10, color:C.textDim, letterSpacing:'0.1em', marginBottom:7 }}>切り返しトーク</div>
+              {OBJECTIONS.map((obj,i) => (
+                <div key={i} style={{ marginBottom:5 }}>
+                  <button onClick={() => setOpenObj(openObj===i?null:i)} style={{ width:'100%', padding: mob ? '9px 12px' : '10px 14px', background: openObj===i?'#1a1206':'#131108', border:`1px solid ${openObj===i?C.gold+'55':C.border}`, color: openObj===i?C.goldLight:C.textMid, cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize: mob ? 12 : 12, fontFamily:"'Noto Sans JP'", textAlign:'left', transition:'all 0.2s' }}>
+                    <span>🚫 「{obj.trigger}」</span>
+                    <span style={{ fontSize:8 }}>{openObj===i?'▲':'▼'}</span>
                   </button>
-                  {openObj === i && (
-                    <div style={{ background: '#100e06', border: `1px solid ${C.gold}28`, borderTop: 'none', padding: '12px 14px 12px 28px' }}>
-                      <p style={{ fontSize: 13, lineHeight: 2, color: '#d4b870', marginBottom: 10 }}>{obj.response}</p>
-                      {obj.tip && <p style={{ fontSize: 11, color: '#8a7a50', borderTop: `1px solid #2a2010`, paddingTop: 8, lineHeight: 1.8 }}>💡 {obj.tip}</p>}
+                  {openObj===i && (
+                    <div style={{ background:'#100e06', border:`1px solid ${C.gold}28`, borderTop:'none', padding: mob ? '10px 12px 10px 22px' : '12px 14px 12px 28px' }}>
+                      <p style={{ fontSize: mob ? 12 : 13, lineHeight:1.9, color:'#d4b870', marginBottom:8 }}>{obj.response}</p>
+                      {obj.tip && <p style={{ fontSize: mob ? 10 : 11, color:'#8a7a50', borderTop:`1px solid #2a2010`, paddingTop:7, lineHeight:1.7 }}>💡 {obj.tip}</p>}
                     </div>
                   )}
                 </div>
@@ -1188,59 +906,54 @@ function PresenterView() {
           )}
         </div>
 
-        {/* ── RIGHT: ポイント・注意・サムネイル ── */}
-        <div style={{ overflow: 'auto', background: panelBg, display: 'flex', flexDirection: 'column', gap: 0 }}>
+        {/* 右: 補足パネル（モバイルは「補足」ボタンで切り替え） */}
+        <div style={{ overflow:'auto', background: panelBg, display: mob ? (rightOpen ? 'flex' : 'none') : 'flex', flexDirection:'column', height: mob ? 'calc(100svh - 170px)' : 'auto' }}>
 
-          {/* 顧客画面サムネイル */}
           {sec.photo && (
-            <div style={{ flexShrink: 0 }}>
-              <div style={{ fontSize: 9, color: C.textDim, letterSpacing: '0.12em', padding: '10px 14px 6px' }}>顧客画面の写真</div>
-              <div style={{ position: 'relative', height: 160, overflow: 'hidden', margin: '0 14px', borderRadius: 2, border: `1px solid ${panelBorder}` }}>
-                <img src={`/images/${sec.photo}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top', opacity: .75 }} />
-                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(0deg,rgba(0,0,0,0.5),transparent)' }} />
+            <div style={{ flexShrink:0 }}>
+              <div style={{ fontSize:9, color:C.textDim, letterSpacing:'0.1em', padding: mob ? '8px 12px 5px' : '10px 14px 6px' }}>顧客画面の写真</div>
+              <div style={{ position:'relative', height: mob ? 140 : 160, overflow:'hidden', margin: mob ? '0 12px' : '0 14px', border:`1px solid ${panelBorder}` }}>
+                <img src={`/images/${sec.photo}`} alt="" style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center top', opacity:.75 }} />
+                <div style={{ position:'absolute', inset:0, background:'linear-gradient(0deg,rgba(0,0,0,0.5),transparent)' }} />
               </div>
             </div>
           )}
 
-          {/* キーポイント */}
           {sec.points && (
-            <div style={{ padding: '12px 14px', borderTop: `1px solid ${panelBorder}`, flexShrink: 0 }}>
-              <div style={{ fontSize: 9, color: C.textDim, letterSpacing: '0.12em', marginBottom: 8 }}>✦ キーポイント</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {sec.points.map((p, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 10px', background: '#14120a', borderLeft: `2px solid ${C.goldDark}` }}>
-                    <span style={{ color: C.goldDark, fontSize: 10, flexShrink: 0, marginTop: 2 }}>▸</span>
-                    <span style={{ fontSize: 11.5, color: '#c8b880', lineHeight: 1.7 }}>{p}</span>
+            <div style={{ padding: mob ? '10px 12px' : '12px 14px', borderTop:`1px solid ${panelBorder}`, flexShrink:0 }}>
+              <div style={{ fontSize:9, color:C.textDim, letterSpacing:'0.1em', marginBottom:7 }}>✦ キーポイント</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+                {sec.points.map((p,i) => (
+                  <div key={i} style={{ display:'flex', gap:7, padding: mob ? '7px 8px' : '8px 10px', background:'#14120a', borderLeft:`2px solid ${C.goldDark}` }}>
+                    <span style={{ color:C.goldDark, fontSize:9, flexShrink:0, marginTop:2 }}>▸</span>
+                    <span style={{ fontSize: mob ? 11 : 11.5, color:'#c8b880', lineHeight:1.7 }}>{p}</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* 注意点 */}
           {sec.watch && (
-            <div style={{ padding: '10px 14px', borderTop: `1px solid ${panelBorder}`, flexShrink: 0 }}>
-              <div style={{ fontSize: 9, color: '#8a4a4a', letterSpacing: '0.12em', marginBottom: 7 }}>⚠ 注意点</div>
-              <div style={{ padding: '9px 12px', background: '#1a0e0e', border: `1px solid #3a2020`, borderLeft: `2px solid #8a4a4a` }}>
-                <p style={{ fontSize: 11.5, color: '#c88080', lineHeight: 1.7 }}>{sec.watch}</p>
+            <div style={{ padding: mob ? '8px 12px' : '10px 14px', borderTop:`1px solid ${panelBorder}`, flexShrink:0 }}>
+              <div style={{ fontSize:9, color:'#8a4a4a', letterSpacing:'0.1em', marginBottom:6 }}>⚠ 注意点</div>
+              <div style={{ padding: mob ? '8px 10px' : '9px 12px', background:'#1a0e0e', border:`1px solid #3a2020`, borderLeft:`2px solid #8a4a4a` }}>
+                <p style={{ fontSize: mob ? 11 : 11.5, color:'#c88080', lineHeight:1.7 }}>{sec.watch}</p>
               </div>
             </div>
           )}
 
-          {/* 次のセクション予告 */}
           {nextSec && (
-            <div style={{ padding: '10px 14px', borderTop: `1px solid ${panelBorder}`, marginTop: 'auto', flexShrink: 0 }}>
-              <div style={{ fontSize: 9, color: C.textDim, letterSpacing: '0.12em', marginBottom: 7 }}>次のセクション</div>
-              <div style={{ padding: '8px 12px', background: '#0e0c08', border: `1px solid ${panelBorder}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ padding: mob ? '8px 12px' : '10px 14px', borderTop:`1px solid ${panelBorder}`, marginTop:'auto', flexShrink:0 }}>
+              <div style={{ fontSize:9, color:C.textDim, letterSpacing:'0.1em', marginBottom:6 }}>次のセクション</div>
+              <div style={{ padding: mob ? '7px 10px' : '8px 12px', background:'#0e0c08', border:`1px solid ${panelBorder}`, display:'flex', alignItems:'center', gap:8 }}>
                 {nextSec.photo && (
-                  <div style={{ width: 36, height: 36, flexShrink: 0, overflow: 'hidden', opacity: .6 }}>
-                    <img src={`/images/${nextSec.photo}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <div style={{ width:32, height:32, flexShrink:0, overflow:'hidden', opacity:.6 }}>
+                    <img src={`/images/${nextSec.photo}`} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
                   </div>
                 )}
                 <div>
-                  <p style={{ fontSize: 10, color: C.textDim, marginBottom: 2 }}>{current + 2} / {P_SECTIONS.length}</p>
-                  <p style={{ fontSize: 12, color: C.textMid }}>{nextSec.label}</p>
-                  <p style={{ fontSize: 10, color: C.textDim }}>目安 {nextSec.min}分</p>
+                  <p style={{ fontSize:10, color:C.textMid }}>{nextSec.label}</p>
+                  <p style={{ fontSize:9, color:C.textDim }}>目安 {nextSec.min}分</p>
                 </div>
               </div>
             </div>
@@ -1249,43 +962,48 @@ function PresenterView() {
       </div>
 
       {/* ── BOTTOM NAV ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px', background: '#0a0908', borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
-        <button onClick={() => setCurrent(c => Math.max(c - 1, 0))} disabled={current === 0} style={{ padding: '8px 22px', background: 'none', border: `1px solid ${current === 0 ? C.border : C.gold + '60'}`, color: current === 0 ? C.textDim : C.goldLight, cursor: current === 0 ? 'not-allowed' : 'pointer', fontSize: 11, letterSpacing: '0.08em' }}>← 前へ</button>
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          {P_SECTIONS.map((_, i) => (
-            <button key={i} onClick={() => setCurrent(i)} style={{ width: i === current ? 16 : 5, height: 5, background: i === current ? C.gold : i < current ? '#3a5a3a' : C.border, border: 'none', cursor: 'pointer', padding: 0, transition: 'all 0.3s', borderRadius: 3 }} />
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding: mob ? '10px 14px' : '10px 20px', background:'#0a0908', borderTop:`1px solid ${C.border}`, flexShrink:0 }}>
+        <button onClick={() => setCurrent(c => Math.max(c-1,0))} disabled={current===0} style={{ padding: mob ? '8px 18px' : '8px 22px', background:'none', border:`1px solid ${current===0?C.border:C.gold+'60'}`, color: current===0?C.textDim:C.goldLight, cursor: current===0?'not-allowed':'pointer', fontSize: mob ? 13 : 11, letterSpacing:'0.05em', minWidth: mob ? 72 : 'auto' }}>← 前へ</button>
+        <div style={{ display:'flex', gap:3, alignItems:'center' }}>
+          {P_SECTIONS.map((_,i) => (
+            <button key={i} onClick={() => setCurrent(i)} style={{ width: i===current ? (mob?14:16) : (mob?4:5), height: mob ? 4 : 5, background: i===current?C.gold : i<current?'#3a5a3a':C.border, border:'none', cursor:'pointer', padding:0, transition:'all 0.3s', borderRadius:2 }} />
           ))}
         </div>
-        <button onClick={() => setCurrent(c => Math.min(c + 1, P_SECTIONS.length - 1))} disabled={current === P_SECTIONS.length - 1} style={{ padding: '8px 22px', background: current === P_SECTIONS.length - 1 ? 'none' : `linear-gradient(135deg,${C.goldDark},${C.goldLight})`, border: `1px solid ${current === P_SECTIONS.length - 1 ? C.border : 'transparent'}`, color: current === P_SECTIONS.length - 1 ? C.textDim : C.charcoal, cursor: current === P_SECTIONS.length - 1 ? 'not-allowed' : 'pointer', fontSize: 11, letterSpacing: '0.08em' }}>次へ →</button>
+        <button onClick={() => setCurrent(c => Math.min(c+1,P_SECTIONS.length-1))} disabled={current===P_SECTIONS.length-1} style={{ padding: mob ? '8px 18px' : '8px 22px', background: current===P_SECTIONS.length-1?'none':`linear-gradient(135deg,${C.goldDark},${C.goldLight})`, border:`1px solid ${current===P_SECTIONS.length-1?C.border:'transparent'}`, color: current===P_SECTIONS.length-1?C.textDim:C.charcoal, cursor: current===P_SECTIONS.length-1?'not-allowed':'pointer', fontSize: mob ? 13 : 11, letterSpacing:'0.05em', minWidth: mob ? 72 : 'auto' }}>次へ →</button>
       </div>
     </div>
   )
 }
 
 // ── SHARED COMPONENTS ─────────────────────────────────────────────────────────
-const SLabel=({en})=><div style={{fontFamily:"'Cormorant Garamond'",fontSize:11,letterSpacing:'0.36em',color:C.gold,textTransform:'uppercase',marginBottom:14}}>{en}</div>
-const hS=(color)=>({fontFamily:"'Cormorant Garamond'",fontSize:'clamp(26px,4vw,46px)',fontWeight:300,color,lineHeight:1.2,marginBottom:14,letterSpacing:'-0.01em'})
-const thS={padding:'12px 16px',textAlign:'left',fontSize:11,letterSpacing:'0.1em',fontWeight:500}
-const tdS={padding:'13px 16px',fontSize:13,borderBottom:`1px solid #ede7d9`,color:C.charcoal}
-function FlowChart({steps,dark}){
-  return <div style={{display:'flex',flexDirection:'column'}}>
-    {steps.map((step,i)=>(
-      <div key={i} style={{display:'flex',alignItems:'flex-start',gap:18}}>
-        <div style={{display:'flex',flexDirection:'column',alignItems:'center',flexShrink:0}}>
-          <div style={{width:34,height:34,border:`2px solid ${C.gold}`,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Cormorant Garamond'",fontSize:14,color:C.gold,background:dark?C.bg:C.warmWhite}}>{step.n}</div>
-          {i<steps.length-1&&<div style={{width:1,height:32,background:`${C.gold}35`}}/>}
+const SLabel = ({ en }) => <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:11, letterSpacing:'0.36em', color:C.gold, textTransform:'uppercase', marginBottom:14 }}>{en}</div>
+const hS = (color) => ({ fontFamily:"'Cormorant Garamond'", fontSize:'clamp(24px,5vw,46px)', fontWeight:300, color, lineHeight:1.2, marginBottom:14, letterSpacing:'-0.01em' })
+const thS = { padding:'10px 12px', textAlign:'left', letterSpacing:'0.08em', fontWeight:500 }
+const tdS = { padding:'11px 12px', borderBottom:`1px solid #ede7d9`, color:C.charcoal }
+function FlowChart({ steps, dark }) {
+  return (
+    <div style={{ display:'flex', flexDirection:'column' }}>
+      {steps.map((step,i) => (
+        <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:14 }}>
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', flexShrink:0 }}>
+            <div style={{ width:30, height:30, border:`2px solid ${C.gold}`, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'Cormorant Garamond'", fontSize:13, color:C.gold, background: dark?C.bg:C.warmWhite, flexShrink:0 }}>{step.n}</div>
+            {i < steps.length-1 && <div style={{ width:1, height:28, background:`${C.gold}35` }} />}
+          </div>
+          <div style={{ paddingTop:4, paddingBottom:18 }}>
+            <h4 style={{ fontFamily:"'Noto Serif JP'", fontSize:13, fontWeight:500, color: dark?C.ivory:C.charcoal, marginBottom:3 }}>{step.t}</h4>
+            <p style={{ fontSize:11, color: dark?'#8a8070':C.muted, lineHeight:1.7 }}>{step.d}</p>
+          </div>
         </div>
-        <div style={{paddingTop:5,paddingBottom:24}}>
-          <h4 style={{fontFamily:"'Noto Serif JP'",fontSize:14,fontWeight:500,color:dark?C.ivory:C.charcoal,marginBottom:4}}>{step.t}</h4>
-          <p style={{fontSize:12,color:dark?'#8a8070':C.muted,lineHeight:1.7}}>{step.d}</p>
-        </div>
-      </div>
-    ))}
-  </div>
+      ))}
+    </div>
+  )
 }
 
-export default function App(){
-  const [route,setRoute]=useState(getRoute())
-  useEffect(()=>{ const h=()=>setRoute(getRoute()); window.addEventListener('popstate',h); return()=>window.removeEventListener('popstate',h) },[])
-  return route==='presenter'?<PresenterView/>:<CustomerView/>
+export default function App() {
+  const [route, setRoute] = useState(getRoute())
+  useEffect(() => {
+    const h = () => setRoute(getRoute())
+    window.addEventListener('popstate', h); return () => window.removeEventListener('popstate', h)
+  }, [])
+  return route === 'presenter' ? <PresenterView /> : <CustomerView />
 }
